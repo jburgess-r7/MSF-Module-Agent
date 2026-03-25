@@ -1,6 +1,6 @@
 ---
 name: msf-module-dev
-description: "Write, review, or fix Metasploit Framework modules following Rapid7 standards. Use when: creating MSF module, auxiliary module, exploit module, metasploit development, msftidy, rubocop, MSF contribution, rapid7 PR, module metadata, HttpClient mixin, store_loot, report_cred, SOAP XML module, HTTP exploit."
+description: "Write, review, or fix Metasploit Framework modules following Rapid7 standards. Use when: creating MSF module, auxiliary module, exploit module, local exploit, post module, scanner module, metasploit development, msftidy, rubocop, MSF contribution, rapid7 PR, module metadata, HttpClient mixin, store_loot, report_cred, SOAP XML module, HTTP exploit, TCP module, FTP module, SMB module, privilege escalation."
 ---
 
 # Metasploit Framework Module Development
@@ -16,13 +16,14 @@ Complete reference for writing MSF modules that pass `msftidy`, RuboCop, and Rap
 
 ## Module Type Classification
 
-| If the module...                                                               | Type                   | Path                                             |
-| ------------------------------------------------------------------------------ | ---------------------- | ------------------------------------------------ |
-| Gathers data via an existing vulnerability (email dump, cred theft, file read) | `Msf::Auxiliary`       | `auxiliary/gather/`                              |
-| Performs admin actions on a service (config change, user creation)             | `Msf::Auxiliary`       | `auxiliary/admin/http/`                          |
-| Scans for the presence of a vulnerability                                      | `Msf::Auxiliary`       | `auxiliary/scanner/http/`                        |
-| Achieves code execution (shell, meterpreter)                                   | `Msf::Exploit::Remote` | `exploits/multi/http/` or `exploits/linux/http/` |
-| Runs after initial access (privesc, lateral movement)                          | `Msf::Post`            | `post/multi/gather/`                             |
+| If the module...                                                               | Type                   | Path example                                        |
+| ------------------------------------------------------------------------------ | ---------------------- | --------------------------------------------------- |
+| Gathers data via an existing vulnerability (email dump, cred theft, file read) | `Msf::Auxiliary`       | `auxiliary/gather/`                                 |
+| Performs admin actions on a service (config change, user creation)             | `Msf::Auxiliary`       | `auxiliary/admin/http/` or `auxiliary/admin/smb/`   |
+| Scans for the presence of a vulnerability or service                           | `Msf::Auxiliary`       | `auxiliary/scanner/http/`, `auxiliary/scanner/ftp/` |
+| Achieves remote code execution (shell, meterpreter)                            | `Msf::Exploit::Remote` | `exploits/multi/http/` or `exploits/linux/http/`    |
+| Achieves local privilege escalation (requires existing session)                | `Msf::Exploit::Local`  | `exploits/linux/local/`, `exploits/windows/local/`  |
+| Runs after initial access (data gathering, lateral movement)                   | `Msf::Post`            | `post/multi/gather/`, `post/linux/gather/`          |
 
 ## Required File Structure
 
@@ -120,6 +121,48 @@ end
 7. Use `res.get_json_document` to parse JSON responses
 8. Use `Rex::Text::Table` for formatted output
 
+### Non-HTTP Modules (TCP, FTP, SMB, etc.)
+
+1. Use the appropriate protocol mixin (`Msf::Exploit::Remote::Tcp`, `Msf::Exploit::Remote::Ftp`, `Msf::Exploit::Remote::SMB::Client`, etc.)
+2. For raw TCP: `connect`/`disconnect`, `sock.put(data)`, `sock.get_once(len, timeout)`
+3. Always handle `Rex::ConnectionError` (connection refused, timeout)
+4. For FTP: use `connect_login` for auth, `send_cmd` for commands
+5. See [references/non-http-modules.md](./references/non-http-modules.md) for templates and protocol mixin reference
+
+### Scanner Modules
+
+1. `include Msf::Auxiliary::Scanner` — **after** protocol-specific mixins
+2. Implement `def run_host(ip)` — do NOT define `def run`
+3. `RHOSTS` and `THREADS` are auto-registered by the Scanner mixin
+4. Use `peer` for log messages (returns `"host:port"`)
+
+### Local Exploit Modules
+
+1. Inherit from `Msf::Exploit::Local` (not `Msf::Exploit::Remote`)
+2. **Must** specify `'SessionTypes'` (e.g., `['shell', 'meterpreter']`)
+3. Use `prepend Msf::Exploit::Remote::AutoCheck` (always **prepend**, never include)
+4. Use `Msf::Post::File` for `read_file`, `write_file`, `file_exist?`
+5. Use `Msf::Exploit::FileDropper` + `register_file_for_cleanup` for artifact cleanup
+6. Use `cmd_exec(command)` to run commands on the target session
+
+### Post-Exploitation Modules
+
+1. Inherit from `Msf::Post`
+2. **Must** specify `'Platform'` and `'SessionTypes'`
+3. Use `session` to interact with the target (`.type`, `.platform`, `.session_host`)
+4. Common mixins: `Msf::Post::File`, `Msf::Post::Linux::Priv`, `Msf::Post::Windows::Registry`
+5. Use `store_loot` with `session` (not `rhost`) as the host parameter
+
+### Check Method
+
+Return `CheckCode` constants (not booleans) from `def check`:
+
+- `CheckCode::Safe` — not vulnerable
+- `CheckCode::Detected` — service running, vuln status unknown
+- `CheckCode::Appears('reason')` — likely vulnerable (version-based)
+- `CheckCode::Vulnerable('reason')` — confirmed vulnerable
+- `CheckCode::Unknown` — cannot determine
+
 ### Credential and Data Reporting
 
 Use `include Msf::Auxiliary::Report` and call:
@@ -214,7 +257,10 @@ Before submitting, verify:
 - [ ] `DisclosureDate` is `YYYY-MM-DD` format
 - [ ] `References` use correct type identifiers (`CVE`, `EDB`, `URL`, `GHSA`)
 - [ ] No hardcoded IPs, domains, or credentials
-- [ ] All `send_request_cgi` calls check for `nil` response
+- [ ] All `send_request_cgi` calls check for `nil` response (HTTP modules)
+- [ ] All TCP `connect` calls handle `Rex::ConnectionError` (non-HTTP modules)
+- [ ] Scanner modules implement `run_host(ip)`, not `run`
+- [ ] Local exploit / post modules specify `SessionTypes`
 - [ ] Module documentation `.md` file exists with Verification Steps and Scenarios
 - [ ] Tested `check` and `run` against a real instance via `~/.msf4/modules/` or `loadpath`
 
@@ -227,3 +273,4 @@ Before submitting, verify:
 | Credential and loot reporting patterns                    | [references/reporting.md](./references/reporting.md)                           |
 | Module documentation template                             | [references/documentation-template.md](./references/documentation-template.md) |
 | HttpClient mixin API reference                            | [references/http-client.md](./references/http-client.md)                       |
+| Non-HTTP module patterns (Scanner, TCP, Local, Post)      | [references/non-http-modules.md](./references/non-http-modules.md)             |

