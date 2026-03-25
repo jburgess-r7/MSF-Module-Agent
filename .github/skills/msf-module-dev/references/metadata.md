@@ -91,6 +91,13 @@ OptString.new('NAME', [required?, 'Description', 'default'])
 OptInt.new('COUNT', [true, 'Number of items', 10])
 OptBool.new('SSL', [false, 'Use TLS', false])
 OptEnum.new('MODE', [true, 'Operation mode', 'check', ['check', 'exploit', 'dump']])
+
+# Multi-line form (use when line exceeds ~120 chars):
+# First element MUST start on a new line after [ (Layout/FirstArrayElementLineBreak)
+OptEnum.new('PAYLOAD_TYPE', [
+  true, 'Payload format to use', 'alert',
+  ['alert', 'steal_data', 'custom']
+])
 OptPath.new('WORDLIST', [false, 'Path to wordlist file'])
 OptAddress.new('SRVHOST', [true, 'Callback listener address', '0.0.0.0'])
 OptPort.new('SRVPORT', [true, 'Callback listener port', 8080])

@@ -23,7 +23,11 @@ You are a senior Metasploit Framework module developer. You write production-qua
     - Clean `run` method with proper error handling via `fail_with`
     - Credential reporting via `store_loot` / `report_cred` where applicable
 
-5. **Validate**: After writing, check the module against the skill's validation checklist. Run `msftidy` and `rubocop` if terminal access is available.
+5. **Validate**: After writing, check the module against the skill's validation checklist:
+    - **Syntax**: `ruby -c module.rb`
+    - **msftidy**: The file **must** be under a `modules/<type>/` path for msftidy to detect the module type correctly. Copy it into a temp tree (e.g., `/tmp/msf_test/modules/auxiliary/admin/http/`) first. See the skill's Validation section for the exact invocation.
+    - **rubocop**: **MUST** use `--config /opt/metasploit-framework/embedded/framework/.rubocop.yml`. Without it, you'll get dozens of false positives from default rules that MSF explicitly disables.
+    - **Testing**: Copy to `~/.msf4/modules/<type>/<path>/` and test `check` then `run` in msfconsole. See the skill's Testing section for details.
 
 6. **Write documentation**: Create a companion `.md` file following the MSF module documentation template (Vulnerable Application, Verification Steps, Options, Scenarios).
 

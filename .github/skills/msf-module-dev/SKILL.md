@@ -94,7 +94,17 @@ end
 5. **No `rescue Exception`** — rescue specific errors or `StandardError`
 6. Hash values in `update_info` must start on the **same line** as their key
 7. The `update_info(` call must start on its **own line** after `super(`
-8. Run `msftidy` (`ruby tools/dev/msftidy.rb modules/path/module.rb`) before submitting
+8. Multi-line `OptEnum`/`register_options` arrays: first element on a **new line** after `[`
+    ```ruby
+    # GOOD
+    OptEnum.new('MODE', [
+      true, 'Operation mode', 'check', ['check', 'exploit']
+    ])
+    # BAD (triggers Layout/FirstArrayElementLineBreak)
+    OptEnum.new('MODE', [true, 'Operation mode', 'check',
+                         ['check', 'exploit']])
+    ```
+9. Run `msftidy` and `rubocop` before submitting (see Validation section below)
 
 ### HTTP Modules
 
@@ -134,20 +144,79 @@ Use `fail_with(Failure::REASON, 'message')` — never `raise` or `abort`.
 | `Failure::BadConfig`       | Invalid module options                    |
 | `Failure::TimeoutExpired`  | Operation timed out                       |
 
-## Validation Checklist
+## Validation
+
+### Running msftidy
+
+`msftidy` extracts the module type from the file path — it looks for `/modules/<type>/` in the absolute path. If the file is outside a `modules/` directory tree, it will give a false "Unexpected super class" warning.
+
+```bash
+# CORRECT — file is under a modules/ tree:
+mkdir -p /tmp/msf_test/modules/auxiliary/admin/http
+cp my_module.rb /tmp/msf_test/modules/auxiliary/admin/http/
+cd /opt/metasploit-framework/embedded/framework
+ruby -e '
+  require_relative "tools/dev/msftidy"
+  f = MsftidyRunner.new("/tmp/msf_test/modules/auxiliary/admin/http/my_module.rb")
+  f.run_checks
+  puts "msftidy status: #{f.status}"
+'
+# Status 0 = clean, 1 = warnings, 2 = errors
+```
+
+### Running rubocop
+
+**CRITICAL**: Always use MSF's `.rubocop.yml` config. The default rubocop config has much stricter limits that don't apply to MSF modules (e.g. `Metrics/MethodLength` defaults to 10 lines vs MSF's 300, `FrozenStringLiteralComment` is disabled, `Style/Documentation` is excluded for `modules/**/*`, etc.).
+
+```bash
+cd /opt/metasploit-framework/embedded/framework
+rubocop --config .rubocop.yml /path/to/my_module.rb
+```
+
+If the file is outside the framework `modules/` directory, `Style/Documentation` may still flag — this is a false positive that disappears when the file is in its final location.
+
+### Testing in msfconsole
+
+The easiest way to load custom modules:
+
+```bash
+# Option 1: Copy to ~/.msf4/modules/ (auto-loaded on startup)
+mkdir -p ~/.msf4/modules/auxiliary/admin/http
+cp my_module.rb ~/.msf4/modules/auxiliary/admin/http/
+msfconsole -q
+# Module is immediately available:
+#   use auxiliary/admin/http/my_module
+
+# Option 2: Use loadpath (point to parent dir containing modules/ subfolder)
+# The path must contain a modules/ subdirectory with the proper tree
+msfconsole -q -x "loadpath /path/to/project"
+# Where /path/to/project/modules/auxiliary/admin/http/my_module.rb exists
+```
+
+After loading, test `check` first, then `run`:
+
+```
+msf6 > use auxiliary/admin/http/my_module
+msf6 auxiliary(admin/http/my_module) > set RHOSTS target
+msf6 auxiliary(admin/http/my_module) > set VERBOSE true
+msf6 auxiliary(admin/http/my_module) > check
+msf6 auxiliary(admin/http/my_module) > run
+```
+
+### Checklist
 
 Before submitting, verify:
 
 - [ ] `ruby -c module.rb` — no syntax errors
-- [ ] `ruby tools/dev/msftidy.rb module.rb` — no warnings
-- [ ] `rubocop module.rb` — no offenses (or only pre-existing style in surrounding code)
+- [ ] `msftidy` — status 0, no warnings (file must be under a `modules/` path tree)
+- [ ] `rubocop --config .rubocop.yml` — no offenses (run from MSF framework dir)
 - [ ] `Notes` hash has `Stability`, `Reliability`, `SideEffects`
 - [ ] `DisclosureDate` is `YYYY-MM-DD` format
 - [ ] `References` use correct type identifiers (`CVE`, `EDB`, `URL`, `GHSA`)
 - [ ] No hardcoded IPs, domains, or credentials
 - [ ] All `send_request_cgi` calls check for `nil` response
 - [ ] Module documentation `.md` file exists with Verification Steps and Scenarios
-- [ ] Tested against a real vulnerable instance with console output captured
+- [ ] Tested `check` and `run` against a real instance via `~/.msf4/modules/` or `loadpath`
 
 ## Reference Files
 
