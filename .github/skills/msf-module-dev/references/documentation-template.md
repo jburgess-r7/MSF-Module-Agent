@@ -8,26 +8,24 @@ For example, module `modules/auxiliary/gather/webapp_data_dump.rb` gets document
 
 ## Template
 
+The documentation file should contain these sections in order. Copy this structure when creating a new module doc file.
+
+### Section 1: Vulnerable Application
+
 ```markdown
 ## Vulnerable Application
 
-<!-- Instructions to set up the vulnerable environment.
-     Include:
-     - Links to vulnerable installer/download
-     - Specific version(s) tested
-     - Installation/configuration steps if non-standard
-     - Docker/Vagrant setup if available
-     This section should help someone reproduce the environment 5+ years later. -->
-
-Example:
 This module targets Acme WebApp versions prior to 4.2.1.
 A dockerized test environment can be set up using the official Docker image:
 https://hub.docker.com/r/acme/webapp
+```
 
+Explain how to set up the vulnerable environment. Include links to downloads, specific versions tested, installation steps, and Docker/Vagrant setup if available. Write so someone can reproduce the environment 5+ years later.
+
+### Section 2: Verification Steps
+
+```markdown
 ## Verification Steps
-
-<!-- Numbered list showing the basic usage flow.
-     Must start with installation and end with expected result. -->
 
 1. Install the application
 1. Start msfconsole
@@ -37,11 +35,14 @@ https://hub.docker.com/r/acme/webapp
 1. Do: `set PASSWORD password123`
 1. Do: `run`
 1. You should see extracted data stored as loot.
+```
 
+Numbered list showing the basic usage flow. Must start with installation and end with expected result.
+
+### Section 3: Options
+
+```markdown
 ## Options
-
-<!-- Document each custom option (not inherited ones like RHOSTS/RPORT).
-     Include the default value if it's likely to change. -->
 
 ### TARGETURI
 
@@ -54,16 +55,18 @@ The username or email address to authenticate with.
 ### PASSWORD
 
 The password for the specified user account.
-
-## Scenarios
-
-<!-- Real-world usage example with full console output.
-     Include the target OS/app version in the heading.
-     Copy-paste actual msfconsole output. -->
-
-### Acme WebApp 4.2.0 on Ubuntu 22.04
 ```
 
+Document each custom option (not inherited ones like RHOSTS/RPORT). Include the default value if relevant.
+
+### Section 4: Scenarios
+
+````markdown
+## Scenarios
+
+### Acme WebApp 4.2.0 on Ubuntu 22.04
+
+```
 msf6 > use auxiliary/gather/webapp_data_dump
 msf6 auxiliary(gather/webapp_data_dump) > set RHOSTS 192.168.1.100
 RHOSTS => 192.168.1.100
@@ -80,10 +83,10 @@ msf6 auxiliary(gather/webapp_data_dump) > run
 [*] Extracting data...
 [+] Data saved in: /home/user/.msf4/loot/20240101120000_default_192.168.1.100_webapp.data_123456.txt
 [*] Auxiliary module execution completed
-
 ```
+````
 
-```
+Include the target OS/app version in the heading. Copy-paste actual msfconsole output. If the module works against multiple versions or OSes, include separate scenario sections for each.
 
 ---
 
