@@ -70,6 +70,10 @@ Target is Acme WebApp < 4.2.1, authenticated stored XSS that steals session toke
 CVE-2024-12345.
 ```
 
+Note: in VSCode you can also select the agent via GUI.
+
+![](./images/vscode-select-agent.png)
+
 ### Specific: Write a module from a vulnerability description
 
 ```
