@@ -28,6 +28,7 @@ The skill encodes real MSF framework internals — method signatures, option typ
 │           ├── metadata.md           # Notes, References, Rankings, Options
 │           ├── reporting.md          # store_loot, credentials, Rex::Text::Table
 │           ├── http-client.md        # HttpClient mixin API reference
+│           ├── non-http-modules.md   # Scanner, TCP, FTP, SMB, Local, Post patterns
 │           └── documentation-template.md  # Module documentation template
 └── README.md                         # This file
 ```
@@ -116,9 +117,13 @@ The agent file supports standard VS Code custom agent properties — you can add
 
 The skill covers the most common MSF module patterns:
 
-- **Module types**: Auxiliary (gather, admin, scanner), Exploit (remote HTTP), Post
-- **Mixins**: `HttpClient`, `Report`
-- **HTTP patterns**: GET/POST/PUT, JSON, SOAP/XML, form data, cookies, redirects, basic auth
+- **Module types**: Auxiliary (gather, admin, scanner), Exploit (remote HTTP, local privesc), Post
+- **HTTP mixins**: `HttpClient` — GET/POST/PUT, JSON, SOAP/XML, multipart file upload, cookies, redirects, basic auth
+- **Non-HTTP mixins**: TCP, UDP, FTP, SMB, SSH, SMTP, MySQL, PostgreSQL, MSSQL, SNMP, LDAP, Telnet, WinRM
+- **Scanner modules**: `Msf::Auxiliary::Scanner` with `run_host(ip)` and batch patterns
+- **Local exploits**: `Msf::Exploit::Local`, `AutoCheck` (prepend), `FileDropper`, `SessionTypes`
+- **Post modules**: `Msf::Post`, session interaction, `Msf::Post::File`, platform/OS-specific mixins
+- **Check method**: All `CheckCode` constants with reason strings
 - **Reporting**: `store_loot`, `create_credential`/`create_credential_login`, `report_service`, `Rex::Text::Table`
 - **Metadata**: All Notes constants, Reference types, Rankings, Option types, DefaultOptions
 - **Validation**: msftidy checks, RuboCop cops, manual checklist
