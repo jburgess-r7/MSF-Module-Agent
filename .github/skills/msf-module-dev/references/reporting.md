@@ -1,5 +1,16 @@
 # Reporting & Loot Reference
 
+## Mandatory Reporting Rule
+
+**Every module that extracts data or discovers credentials MUST report its findings** using `store_loot` and/or `create_credential_login`. Modules that only `print_good` their findings without reporting to the database will be rejected in review.
+
+- **NEVER use `File.write` or `File.open`** to save data — always use `store_loot`, which saves data to the proper loot directory and records it in the MSF database.
+- `auxiliary/gather/` modules must call `store_loot` for extracted data.
+- Modules that discover credentials must call `create_credential_login` (or the helper pattern below).
+- `auxiliary/scanner/` modules that discover services must call `report_service`.
+
+---
+
 ## store_loot
 
 Saves exfiltrated data to disk and records it in the database.

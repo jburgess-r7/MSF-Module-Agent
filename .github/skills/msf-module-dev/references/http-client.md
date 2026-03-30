@@ -8,6 +8,10 @@ include Msf::Exploit::Remote::HttpClient
 
 This auto-registers: `RHOSTS`, `RPORT`, `VHOST`, `SSL`, `SSLCert`, `TARGETURI`, `HttpUsername`, `HttpPassword`, `UserAgent`, evasion options, and more.
 
+**Do NOT re-register these** — adding `Opt::RHOST`, `Opt::RPORT(80)`, `OptString.new('VHOST', ...)`, or `OptBool.new('SSL', ...)` in `register_options` causes duplicates and will be rejected in review.
+
+**Do NOT override `target_uri`** — the mixin defines this method. If you need the raw datastore value, use `datastore['TARGETURI']` directly.
+
 ---
 
 ## send_request_cgi(opts = {}, timeout = 20, disconnect = true)
@@ -114,6 +118,21 @@ res = send_request_cgi(
 
 Same as `send_request_cgi` but **auto-follows redirects** (301/302/303/307/308). Use when login endpoints redirect after auth.
 
+### Timeout for payload-triggering requests
+
+When the request that triggers a payload (e.g., RCE) will hang or never return, set `timeout: 0` so the framework doesn't wait:
+
+```ruby
+# The exploit-triggering request — server won't respond
+send_request_cgi(
+  'method' => 'POST',
+  'uri'    => normalize_uri(target_uri.path, 'vulnerable'),
+  'data'   => payload_data
+), 0  # timeout = 0, don't wait for response
+```
+
+For session-based exploits, rely on `WfsDelay` (Wait For Session Delay) — it's already a registered option. Don't create a custom `WAIT` option that duplicates it.
+
 ```ruby
 res = send_request_cgi!(
   { 'method' => 'POST', 'uri' => '/login', 'vars_post' => creds },
@@ -139,6 +158,16 @@ res = send_request_cgi(...)
 fail_with(Failure::Unreachable, 'Connection failed') unless res
 ```
 
+**Body can be nil** — always guard with `.to_s` when pattern matching:
+
+```ruby
+# WRONG — raises NoMethodError if body is nil
+res.body.include?('success')
+
+# CORRECT — safe even when body is nil
+res.body.to_s.include?('success')
+```
+
 ### Attributes
 
 | Method    | Type      | Description                                                       |
@@ -150,16 +179,16 @@ fail_with(Failure::Unreachable, 'Connection failed') unless res
 
 ### Parsing methods
 
-| Method               | Returns        | Description                                     |
-| -------------------- | -------------- | ----------------------------------------------- |
-| `get_json_document`  | Hash           | `JSON.parse(body)`, returns `{}` on parse error |
-| `get_html_document`  | Nokogiri::HTML | Parsed HTML document                            |
-| `get_xml_document`   | Nokogiri::XML  | Parsed XML document                             |
-| `get_cookies`        | String         | Parsed Set-Cookie as `"k=v; k2=v2"` for reuse   |
-| `get_cookies_parsed` | Hash           | Parsed cookie key-value pairs                   |
-| `get_hidden_inputs`  | Array\<Hash\>  | Hidden form inputs per form                     |
-| `redirect?`          | Boolean        | True if response is a redirect                  |
-| `redirection`        | URI            | Location header as URI                          |
+| Method               | Returns        | Description                                                                                       |
+| -------------------- | -------------- | ------------------------------------------------------------------------------------------------- |
+| `get_json_document`  | Hash           | `JSON.parse(body)`, returns `{}` on parse error — **always prefer this over manual `JSON.parse`** |
+| `get_html_document`  | Nokogiri::HTML | Parsed HTML document                                                                              |
+| `get_xml_document`   | Nokogiri::XML  | Parsed XML document                                                                               |
+| `get_cookies`        | String         | Parsed Set-Cookie as `"k=v; k2=v2"` for reuse                                                     |
+| `get_cookies_parsed` | Hash           | Parsed cookie key-value pairs                                                                     |
+| `get_hidden_inputs`  | Array\<Hash\>  | Hidden form inputs per form                                                                       |
+| `redirect?`          | Boolean        | True if response is a redirect                                                                    |
+| `redirection`        | URI            | Location header as URI                                                                            |
 
 ### Response handling patterns
 
@@ -169,7 +198,7 @@ res = send_request_cgi('uri' => '/api/data')
 fail_with(Failure::Unreachable, 'Connection failed') unless res
 fail_with(Failure::UnexpectedReply, "Unexpected status: #{res.code}") unless res.code == 200
 
-# JSON response
+# JSON response — ALWAYS use get_json_document, never manual JSON.parse
 json = res.get_json_document
 fail_with(Failure::UnexpectedReply, 'Invalid JSON response') if json.empty?
 token = json['authToken'] || fail_with(Failure::UnexpectedReply, 'No auth token in response')
@@ -194,6 +223,8 @@ send_request_cgi('uri' => '/dashboard', 'cookie' => cookies)
 ## Cookie Handling
 
 ### Automatic (recommended for multi-step flows)
+
+When `keep_cookies: true` is set, the cookie jar automatically stores and replays cookies — **do NOT manually extract and replay cookies alongside `keep_cookies`** (this causes duplicate cookies).
 
 ```ruby
 # First request — store cookies automatically

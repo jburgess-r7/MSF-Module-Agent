@@ -33,6 +33,8 @@ Every module must include a `Notes` hash with all three keys. Enforced by `Lint/
 | `FIRST_ATTEMPT_FAIL` | First attempt typically fails, subsequent attempts succeed |
 | `EVENT_DEPENDENT`    | Requires a specific event (user action, cron job, etc.)    |
 
+**Important**: `REPEATABLE_SESSION` is **only** for modules that actually create sessions (exploits with payloads). Auxiliary modules that gather data or admin modules use `'Reliability' => []`.
+
 ### SideEffects Constants
 
 | Constant            | Meaning                                                    |
@@ -67,6 +69,8 @@ Use `UNKNOWN_STABILITY`, `UNKNOWN_RELIABILITY`, or `UNKNOWN_SIDE_EFFECTS` (array
 **msftidy validates**: CVE format must be `YYYY-NNNN+` (4-digit year, 4+ digit ID). EDB and BID must be numeric.
 
 ## Rankings (Exploit modules only)
+
+**Rank is ONLY for exploit modules**. Never set `Rank` on auxiliary or post modules — reviewers will flag it immediately.
 
 ```ruby
 class MetasploitModule < Msf::Exploit::Remote

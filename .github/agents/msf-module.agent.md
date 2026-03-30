@@ -50,8 +50,16 @@ For deeper reference on specific topics, load the appropriate file:
 - NEVER use `require` for standard MSF libraries — they are autoloaded
 - NEVER use `print` or `puts` — use `print_status`, `print_good`, `print_error`, `print_warning`, `vprint_status`
 - NEVER hardcode paths, IPs, or credentials in module source
+- NEVER re-register options that mixins already provide (RHOSTS, RPORT, VHOST, SSL, TARGETURI)
+- NEVER override `target_uri` — it's defined by HttpClient
+- NEVER use `File.write` to save data — use `store_loot`
+- NEVER call `fail_with` or raise inside a `check` method — return CheckCode constants
 - ALWAYS use `normalize_uri` and `target_uri` for URL construction
 - ALWAYS use `send_request_cgi` (not raw HTTP libraries) for HTTP modules
 - ALWAYS handle `nil` responses from `send_request_cgi` (timeout/connection failure)
+- ALWAYS guard `res.body` with `.to_s` before string operations
+- ALWAYS use `res.get_json_document` — never manual `JSON.parse`
+- ALWAYS use `Rex::Version` for version comparisons
 - ALWAYS use 2-space indentation, no tabs
+- ALWAYS set password option defaults to `nil`, not empty string
 - String delimiters: single quotes unless interpolation is needed

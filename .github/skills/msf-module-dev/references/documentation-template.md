@@ -105,3 +105,7 @@ Include the target OS/app version in the heading. Copy-paste actual msfconsole o
 - **Show real output**: Copy-paste actual msfconsole sessions, not hypothetical ones
 - **Plan for the future**: Write as if someone will need to reproduce this setup in 5+ years
 - **Multiple scenarios**: If the module works against multiple versions or OSes, include separate scenarios for each
+- **Heading hierarchy**: Use `###` for OS/version headings under Scenarios, `####` for sub-scenarios. Never skip heading levels.
+- **Only relevant output**: Do not include unrelated module output, msfconsole banner text, or prior commands — only the output from the module being documented
+- **Document ALL custom options**: Every `register_options` entry needs a corresponding Options section entry with its default value
+- **No excessive escaping**: Do not escape characters that don't need escaping in Markdown (e.g., `\_` is unnecessary, use `_`)

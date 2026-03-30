@@ -40,6 +40,8 @@ class MetasploitModule < Msf::Auxiliary
           'Module Author <email>'      # MSF module
         ],
         # Author: No Twitter handles. Use <email> in angle brackets.
+        # Format: 'Name', # role comment  (role in COMMENT, not in string)
+        # WRONG: 'Name (role)' or 'Name (discoverer)'
 
         'License' => MSF_LICENSE,
 
@@ -71,8 +73,10 @@ class MetasploitModule < Msf::Auxiliary
     )
 
     register_options([
-      OptString.new('USERNAME', [true, 'Valid username for authentication', '']),
-      OptString.new('PASSWORD', [true, 'Password for the specified user', '']),
+      OptString.new('USERNAME', [true, 'Valid username for authentication', nil]),
+      OptString.new('PASSWORD', [true, 'Password for the specified user', nil]),
+      # Password defaults MUST be nil, not ''. Empty string implies
+      # a blank password is normal for the product.
       OptString.new('TARGETURI', [true, 'Base path to the application', '/']),
       OptString.new('VICTIM', [false, 'Target email or user to attack', '']),
       OptString.new('FOLDER', [true, 'Mail folder to dump', 'inbox'])

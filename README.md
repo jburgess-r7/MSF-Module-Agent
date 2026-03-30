@@ -12,7 +12,7 @@ When invoked, the `@msf-module` agent:
 4. Validates the output against the built-in checklist (Notes hash, DisclosureDate format, nil response checks, etc.)
 5. Generates companion documentation (Vulnerable Application, Verification Steps, Scenarios)
 
-The skill encodes real MSF framework internals — method signatures, option types, RuboCop cops, msftidy checks — sourced directly from the framework source, not documentation.
+The skill encodes real MSF framework internals — method signatures, option types, RuboCop cops, msftidy checks — sourced directly from the framework source and real Rapid7 maintainer PR review feedback, not documentation.
 
 ## What's Included
 

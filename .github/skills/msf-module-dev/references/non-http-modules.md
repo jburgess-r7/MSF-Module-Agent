@@ -293,6 +293,21 @@ register_file_for_cleanup('/tmp/payload.bin')
 register_dir_for_cleanup('/tmp/exploit_dir')
 ```
 
+### Cleanup Method
+
+For custom cleanup logic (removing artifacts, restoring state), define a `cleanup` method. **Always call `super`** to ensure framework cleanup (including FileDropper) runs:
+
+```ruby
+def cleanup
+  # Custom cleanup logic here
+  remove_payload if @payload_deployed
+ensure
+  super
+end
+```
+
+Never put cleanup logic at the end of `exploit`/`run` — if the method raises an exception, that code won't execute. The `cleanup` method is called automatically regardless of success/failure.
+
 ---
 
 ## Post-Exploitation Modules (`Msf::Post`)

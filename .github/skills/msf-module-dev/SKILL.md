@@ -78,19 +78,38 @@ end
 
 ### Metadata
 
-1. **Name**: Short, descriptive, title case. No special chars (`&<>=`). Include vendor and vuln type.
-2. **Description**: Use `%q{...}` multi-line format. Indent content to align with the `Description` key. Explain what the module does, the vulnerability, affected versions, and prerequisites.
-3. **Author**: Array of `'Name'` or `'Name <email>'`. No Twitter handles. Balanced angle brackets.
-4. **References**: Array of `['TYPE', 'VALUE']` pairs. See [references/metadata.md](./references/metadata.md).
+1. **Name**: Short, descriptive, title case. No special chars (`&<>=`). Include vendor name, product, and vulnerability type for searchability. Good: `'Acme FooApp Unauthenticated SQL Injection'`. Bad: `'Authenticated admin can upload crafted zip file for RCE'`.
+2. **Description**: Use `%q{...}` multi-line format. Indent content to align with the `Description` key. Explain what the module does, the vulnerability, affected versions, fixed version (when known), and prerequisites.
+3. **Author**: Array of strings. Format: `'Name', # role comment` (comment on same line). Never embed roles in parens: `'Name (role)'` is wrong. No Twitter handles. Balanced angle brackets for email.
+    ```ruby
+    'Author' => [
+      'Discoverer Name', # Vulnerability discovery
+      'Module Author',   # Metasploit module
+    ]
+    ```
+4. **References**: Array of `['TYPE', 'VALUE']` pairs. **Each reference MUST be its own array**. Never combine: `['CVE', '2024-1234', 'URL', 'https://...']` is WRONG.
+    ```ruby
+    # CORRECT
+    'References' => [
+      ['CVE', '2024-1234'],
+      ['URL', 'https://vendor.com/advisory']
+    ]
+    # WRONG — multiple refs in one array
+    'References' => [
+      ['CVE', '2024-1234', 'URL', 'https://vendor.com/advisory']
+    ]
+    ```
 5. **DisclosureDate**: ISO 8601 format `'YYYY-MM-DD'`. Required for exploits. Recommended for auxiliary.
 6. **Notes**: MUST contain `Stability`, `Reliability`, and `SideEffects` keys. See [references/metadata.md](./references/metadata.md).
-7. **License**: Always `MSF_LICENSE` unless the code has a specific BSD/MIT license.
+    - `REPEATABLE_SESSION` is **only** for modules that actually create sessions (exploits). Auxiliary modules that don't create sessions must use `'Reliability' => []`.
+7. **Rank**: Only for **exploit** modules. Never set `Rank` on auxiliary or post modules.
+8. **License**: Always `MSF_LICENSE` unless the code has a specific BSD/MIT license.
 
 ### Code Style
 
 1. **2-space indentation**, no tabs, no trailing whitespace
 2. **Single quotes** unless string interpolation is needed
-3. **No `require`** for MSF libs — they autoload
+3. **No `require`** for MSF/Rex libs — they autoload. Never `require 'msf/core'` or `require 'nokogiri'` (already bundled). Only `require` for stdlib not loaded by framework (e.g., `require 'fiddle'`, `require 'ipaddr'`).
 4. **No `print`/`puts`** — use `print_status`, `print_good`, `print_error`, `print_warning`
 5. **No `rescue Exception`** — rescue specific errors or `StandardError`
 6. Hash values in `update_info` must start on the **same line** as their key
@@ -106,20 +125,46 @@ end
                          ['check', 'exploit']])
     ```
 9. Run `msftidy` and `rubocop` before submitting (see Validation section below)
+10. Use `Rex::Version` for version comparisons instead of manual major/minor/patch splitting
+    ```ruby
+    # GOOD
+    Rex::Version.new(version) < Rex::Version.new('4.2.1')
+    # BAD
+    major, minor, patch = version.split('.').map(&:to_i)
+    if major < 4 || (major == 4 && minor < 2)
+    ```
+11. Prefer hash return values over arrays for methods returning multiple distinct items. Use kwargs for reusable APIs.
+12. Don't use `get_`/`set_` prefixes for accessor methods in new code
 
 ### HTTP Modules
 
 1. Always `include Msf::Exploit::Remote::HttpClient`
 2. Use `send_request_cgi({...})` — NEVER raw HTTP libraries
 3. Always check for `nil` response (timeout): `fail_with(Failure::Unreachable, '...') unless res`
-4. Use `normalize_uri(target_uri.path, 'endpoint')` for URL paths
-5. Register `TARGETURI` if the app may not be at the web root:
+4. Always check body with `.to_s` before string operations: `res.body.to_s.include?('foo')` — `res.body` can be nil
+5. Use `normalize_uri(target_uri.path, 'endpoint')` for URL paths
+6. **Do NOT override `target_uri`** — the HttpClient mixin defines it. If you need the base path, use `datastore['TARGETURI']` directly.
+7. Register `TARGETURI` only if a sensible default differs from `'/'`:
     ```ruby
-    OptString.new('TARGETURI', [true, 'Base path', '/'])
+    OptString.new('TARGETURI', [true, 'Base path', '/app'])
     ```
-6. Set sensible `DefaultOptions` for `RPORT` and `SSL`
-7. Use `res.get_json_document` to parse JSON responses
-8. Use `Rex::Text::Table` for formatted output
+8. **Do NOT re-register options that HttpClient already provides** — `RHOSTS`, `RPORT`, `VHOST`, `SSL`, `TARGETURI` are auto-registered by the mixin. Re-registering them causes duplicate options.
+9. Set sensible `DefaultOptions` for `RPORT` and `SSL`
+10. Use `res.get_json_document` to parse JSON responses — never manual `JSON.parse(res.body)`
+11. Use `Rex::Text::Table` for formatted output
+12. Cookie jar is automatic with `keep_cookies: true` — don't manually track cookies with local variables
+13. **Password/credential option defaults**: Use `nil` for passwords, not empty string `''`. Empty string is only acceptable if the product's default password is literally blank.
+    ```ruby
+    # GOOD — forces user to set a value
+    OptString.new('PASSWORD', [true, 'Password', nil])
+    # BAD — empty string implies blank is normal
+    OptString.new('PASSWORD', [true, 'Password', ''])
+    ```
+14. For payload-triggering requests that won't return (shell established), set `timeout` to 0 or 1:
+    ```ruby
+    send_request_cgi({ 'uri' => shell_uri, 'method' => 'POST' }, 1)
+    ```
+15. For exploit modules, prefer `WfsDelay` (wait-for-session delay) over custom sleep options
 
 ### Non-HTTP Modules (TCP, FTP, SMB, etc.)
 
@@ -163,15 +208,44 @@ Return `CheckCode` constants (not booleans) from `def check`:
 - `CheckCode::Vulnerable('reason')` — confirmed vulnerable
 - `CheckCode::Unknown` — cannot determine
 
+**Key rules from PR reviews:**
+
+- **Never raise exceptions or call `fail_with` in check** — always return a CheckCode
+- **Keep check logic completely separate from run/exploit logic** — don't use boolean flags that change a method's return type between CheckCode and data
+- **Verify check doesn't false-positive against unrelated software** — if you check for `/admin/dashboard` existing, ensure the response actually contains the expected application's fingerprint
+- Use `prepend Msf::Exploit::Remote::AutoCheck` to auto-run check before exploit — always `prepend`, never `include`
+
 ### Credential and Data Reporting
 
 Use `include Msf::Auxiliary::Report` and call:
 
-- **`store_loot(type, ctype, host, data, filename, description)`** — for exfiltrated files/data
+- **`store_loot(type, ctype, host, data, filename, description)`** — for exfiltrated files/data. **Always use `store_loot` instead of `File.write`** for saving data to disk.
 - **`create_credential` + `create_credential_login`** — for discovered credentials
 - **`report_service(host:, port:, proto:, name:)`** — to record identified services
 
+**Scanner/gather modules MUST report findings** — if your module discovers data but doesn't call `store_loot`, `report_vuln`, or `report_cred`, reviewers will reject it.
+
 See [references/reporting.md](./references/reporting.md) for the full credential reporting pattern.
+
+### Cleanup
+
+Use the `cleanup` method for artifact removal (shell files, temp data). **Always call `super`** to ensure parent mixins clean up connections/sessions:
+
+```ruby
+def cleanup
+  super
+  return unless @shell_uri
+
+  send_request_cgi(
+    'method' => 'POST',
+    'uri' => @shell_uri,
+    'vars_post' => { @cleanup_param => '1' },
+    'timeout' => 5
+  )
+end
+```
+
+Do NOT put cleanup logic at the end of `exploit` — if something fails or the session dies, `cleanup` is guaranteed to run but code after the exploit point may not.
 
 ### Error Handling
 
@@ -254,13 +328,28 @@ Before submitting, verify:
 - [ ] `msftidy` — status 0, no warnings (file must be under a `modules/` path tree)
 - [ ] `rubocop --config .rubocop.yml` — no offenses (run from MSF framework dir)
 - [ ] `Notes` hash has `Stability`, `Reliability`, `SideEffects`
+- [ ] `Reliability` uses `REPEATABLE_SESSION` only if module creates sessions
+- [ ] `Rank` is set only on exploit modules (not auxiliary or post)
 - [ ] `DisclosureDate` is `YYYY-MM-DD` format
-- [ ] `References` use correct type identifiers (`CVE`, `EDB`, `URL`, `GHSA`)
-- [ ] No hardcoded IPs, domains, or credentials
+- [ ] `References` — each ref is its own array; no combined `['CVE', 'x', 'URL', 'y']`
+- [ ] `Author` — format is `'Name', # role comment` (not parens-in-string)
+- [ ] Module name is descriptive and searchable (vendor + product + vuln type)
+- [ ] No hardcoded IPs, domains, or credentials; password defaults are `nil` not `''`
+- [ ] No `require` for bundled MSF/Rex libs; no `require 'msf/core'`
+- [ ] Does not re-register mixin-provided options (RHOSTS, RPORT, VHOST, SSL, TARGETURI)
+- [ ] Does not override `target_uri` method
 - [ ] All `send_request_cgi` calls check for `nil` response (HTTP modules)
+- [ ] All response body access uses `.to_s` (e.g., `res.body.to_s.include?('...')`)
+- [ ] Payload-triggering requests use `timeout: 0` or `1`
+- [ ] JSON parsed via `res.get_json_document`, not `JSON.parse`
 - [ ] All TCP `connect` calls handle `Rex::ConnectionError` (non-HTTP modules)
 - [ ] Scanner modules implement `run_host(ip)`, not `run`
 - [ ] Local exploit / post modules specify `SessionTypes`
+- [ ] `check` method returns `CheckCode` constants, never calls `fail_with`
+- [ ] `check` method tested against non-matching target to avoid false positives
+- [ ] Uses `cleanup` method for artifact removal (not manual cleanup at end of exploit)
+- [ ] Uses `store_loot` for saving data (not `File.write`)
+- [ ] Scanner/gather modules report findings via `store_loot` or `report_cred`
 - [ ] Module documentation `.md` file exists with Verification Steps and Scenarios
 - [ ] Tested `check` and `run` against a real instance via `~/.msf4/modules/` or `loadpath`
 
