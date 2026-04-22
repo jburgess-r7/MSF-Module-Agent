@@ -166,13 +166,15 @@ end
     ```
 15. For exploit modules, prefer `WfsDelay` (wait-for-session delay) over custom sleep options
 
-### Non-HTTP Modules (TCP, FTP, SMB, etc.)
+### Non-HTTP Modules (TCP, UDP, FTP, SMB, DTLS, etc.)
 
-1. Use the appropriate protocol mixin (`Msf::Exploit::Remote::Tcp`, `Msf::Exploit::Remote::Ftp`, `Msf::Exploit::Remote::SMB::Client`, etc.)
+1. Use the appropriate protocol mixin (`Msf::Exploit::Remote::Tcp`, `Msf::Exploit::Remote::Ftp`, `Msf::Exploit::Remote::SMB::Client`, `Msf::Exploit::Remote::Udp`, etc.)
 2. For raw TCP: `connect`/`disconnect`, `sock.put(data)`, `sock.get_once(len, timeout)`
 3. Always handle `Rex::ConnectionError` (connection refused, timeout)
 4. For FTP: use `connect_login` for auth, `send_cmd` for commands
-5. See [references/non-http-modules.md](./references/non-http-modules.md) for templates and protocol mixin reference
+5. For raw UDP: `include Msf::Exploit::Remote::Udp`, use `connect_udp`/`disconnect_udp`, `udp_sock.sendto`/`udp_sock.recvfrom` for I/O
+6. **DTLS over UDP**: Ruby has no native DTLS. Use `require 'fiddle'` to bind OpenSSL C API directly (`SSL_CTX_new`, `SSL_connect`, `BIO_new`/`BIO_read`/`BIO_write`, etc.) with two in-memory BIOs — the module shuttles raw UDP frames in/out of the BIOs and calls `SSL_connect`/`SSL_read`/`SSL_write`. Always free SSL objects in an `ensure` block (`SSL_free` + `SSL_CTX_free`). This is the only approach that works for DTLS 1.0/1.2 modules.
+7. See [references/non-http-modules.md](./references/non-http-modules.md) for templates and protocol mixin reference, including a complete DTLS/Fiddle skeleton
 
 ### Scanner Modules
 
