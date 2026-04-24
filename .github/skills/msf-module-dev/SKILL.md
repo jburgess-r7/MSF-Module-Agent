@@ -112,9 +112,10 @@ end
 3. **No `require`** for MSF/Rex libs — they autoload. Never `require 'msf/core'` or `require 'nokogiri'` (already bundled). Only `require` for stdlib not loaded by framework (e.g., `require 'fiddle'`, `require 'ipaddr'`).
 4. **No `print`/`puts`** — use `print_status`, `print_good`, `print_error`, `print_warning`
 5. **No `rescue Exception`** — rescue specific errors or `StandardError`
-6. Hash values in `update_info` must start on the **same line** as their key
-7. The `update_info(` call must start on its **own line** after `super(`
-8. Multi-line `OptEnum`/`register_options` arrays: first element on a **new line** after `[`
+6. **No inline `rescue`** — `disconnect rescue nil` triggers RuboCop's `Style/RescueModifier`. Use a proper `begin`/`rescue` block or let the framework handle it.
+7. Hash values in `update_info` must start on the **same line** as their key
+8. The `update_info(` call must start on its **own line** after `super(`
+9. Multi-line `OptEnum`/`register_options` arrays: first element on a **new line** after `[`
     ```ruby
     # GOOD
     OptEnum.new('MODE', [
@@ -124,8 +125,8 @@ end
     OptEnum.new('MODE', [true, 'Operation mode', 'check',
                          ['check', 'exploit']])
     ```
-9. Run `msftidy` and `rubocop` before submitting (see Validation section below)
-10. Use `Rex::Version` for version comparisons instead of manual major/minor/patch splitting
+10. Run `msftidy` and `rubocop` before submitting (see Validation section below)
+11. Use `Rex::Version` for version comparisons instead of manual major/minor/patch splitting
     ```ruby
     # GOOD
     Rex::Version.new(version) < Rex::Version.new('4.2.1')
@@ -133,8 +134,8 @@ end
     major, minor, patch = version.split('.').map(&:to_i)
     if major < 4 || (major == 4 && minor < 2)
     ```
-11. Prefer hash return values over arrays for methods returning multiple distinct items. Use kwargs for reusable APIs.
-12. Don't use `get_`/`set_` prefixes for accessor methods in new code
+12. Prefer hash return values over arrays for methods returning multiple distinct items. Use kwargs for reusable APIs.
+13. Don't use `get_`/`set_` prefixes for accessor methods in new code
 
 ### HTTP Modules
 
@@ -151,30 +152,38 @@ end
 8. **Do NOT re-register options that HttpClient already provides** — `RHOSTS`, `RPORT`, `VHOST`, `SSL`, `TARGETURI` are auto-registered by the mixin. Re-registering them causes duplicate options.
 9. Set sensible `DefaultOptions` for `RPORT` and `SSL`
 10. Use `res.get_json_document` to parse JSON responses — never manual `JSON.parse(res.body)`
-11. Use `Rex::Text::Table` for formatted output
-12. Cookie jar is automatic with `keep_cookies: true` — don't manually track cookies with local variables
-13. **Password/credential option defaults**: Use `nil` for passwords, not empty string `''`. Empty string is only acceptable if the product's default password is literally blank.
+11. Use `res.get_html_document` for HTML parsing (returns a Nokogiri document) — useful for extracting CSRF tokens, form fields, version strings
+12. Use `Rex::Text::Table` for formatted output
+13. Cookie jar is automatic with `keep_cookies: true` — don't manually track cookies with local variables
+14. **Password/credential option defaults**: Use `nil` for passwords, not empty string `''`. Empty string is only acceptable if the product's default password is literally blank.
     ```ruby
     # GOOD — forces user to set a value
     OptString.new('PASSWORD', [true, 'Password', nil])
     # BAD — empty string implies blank is normal
     OptString.new('PASSWORD', [true, 'Password', ''])
     ```
-14. For payload-triggering requests that won't return (shell established), set `timeout` to 0 or 1:
+15. For payload-triggering requests that won't return (shell established), set `timeout` to 0 or 1:
     ```ruby
     send_request_cgi({ 'uri' => shell_uri, 'method' => 'POST' }, 1)
     ```
-15. For exploit modules, prefer `WfsDelay` (wait-for-session delay) over custom sleep options
+16. For exploit modules, prefer `WfsDelay` (wait-for-session delay) over custom sleep options
 
-### Non-HTTP Modules (TCP, UDP, FTP, SMB, DTLS, etc.)
+### Non-HTTP Modules (TCP, FTP, SMB, etc.)
 
-1. Use the appropriate protocol mixin (`Msf::Exploit::Remote::Tcp`, `Msf::Exploit::Remote::Ftp`, `Msf::Exploit::Remote::SMB::Client`, `Msf::Exploit::Remote::Udp`, etc.)
+1. Use the appropriate protocol mixin (`Msf::Exploit::Remote::Tcp`, `Msf::Exploit::Remote::Ftp`, `Msf::Exploit::Remote::SMB::Client`, etc.)
 2. For raw TCP: `connect`/`disconnect`, `sock.put(data)`, `sock.get_once(len, timeout)`
 3. Always handle `Rex::ConnectionError` (connection refused, timeout)
 4. For FTP: use `connect_login` for auth, `send_cmd` for commands
-5. For raw UDP: `include Msf::Exploit::Remote::Udp`, use `connect_udp`/`disconnect_udp`, `udp_sock.sendto`/`udp_sock.recvfrom` for I/O
-6. **DTLS over UDP**: Ruby has no native DTLS. Use `require 'fiddle'` to bind OpenSSL C API directly (`SSL_CTX_new`, `SSL_connect`, `BIO_new`/`BIO_read`/`BIO_write`, etc.) with two in-memory BIOs — the module shuttles raw UDP frames in/out of the BIOs and calls `SSL_connect`/`SSL_read`/`SSL_write`. Always free SSL objects in an `ensure` block (`SSL_free` + `SSL_CTX_free`). This is the only approach that works for DTLS 1.0/1.2 modules.
-7. See [references/non-http-modules.md](./references/non-http-modules.md) for templates and protocol mixin reference, including a complete DTLS/Fiddle skeleton
+5. See [references/non-http-modules.md](./references/non-http-modules.md) for templates and protocol mixin reference
+
+### Payload Delivery (CmdStager vs Fetch)
+
+When an exploit module supports binary payloads (dropper targets), choose the right delivery mechanism:
+
+- **CmdStager** (`include Msf::Exploit::CmdStager`): Splits a binary payload into small chunks delivered via the command injection channel itself. Useful when the target has no outbound HTTP/network access. Flavors: `printf`, `bourne`, `wget`, `curl`, `certutil`, `psh_invokewebrequest`.
+- **Fetch payloads** (e.g., `fetch/linux/x64/meterpreter/reverse_tcp`): MSF starts an HTTP server and the target downloads the payload binary via `curl`/`wget`. Simpler and more reliable than CmdStager when the target can reach the attacker's HTTP server.
+
+**Guidance**: If the target environment has `curl`/`wget` available (most Linux servers), fetch payloads are simpler and preferred. CmdStager is useful when outbound HTTP is blocked or the tools aren't available. Consider offering both via separate targets if the exploit channel supports it.
 
 ### Scanner Modules
 
@@ -222,6 +231,7 @@ Return `CheckCode` constants (not booleans) from `def check`:
 Use `include Msf::Auxiliary::Report` and call:
 
 - **`store_loot(type, ctype, host, data, filename, description)`** — for exfiltrated files/data. **Always use `store_loot` instead of `File.write`** for saving data to disk.
+    - **Exception**: `File.write` is acceptable for **local** temp files needed during exploitation (e.g., writing to `Dir.mktmpdir` for git operations, creating local payload files). These must be cleaned up in the `cleanup` method.
 - **`create_credential` + `create_credential_login`** — for discovered credentials
 - **`report_service(host:, port:, proto:, name:)`** — to record identified services
 
