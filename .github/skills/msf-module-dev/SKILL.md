@@ -80,7 +80,7 @@ end
 
 1. **Name**: Short, descriptive, title case. No special chars (`&<>=`). Include vendor name, product, and vulnerability type for searchability. Good: `'Acme FooApp Unauthenticated SQL Injection'`. Bad: `'Authenticated admin can upload crafted zip file for RCE'`.
 2. **Description**: Use `%q{...}` multi-line format. Indent content to align with the `Description` key. Explain what the module does, the vulnerability, affected versions, fixed version (when known), and prerequisites.
-3. **Author**: Array of strings. Format: `'Name', # role comment` (comment on same line). Never embed roles in parens: `'Name (role)'` is wrong. No Twitter handles. Balanced angle brackets for email.
+3. **Author**: Array of strings. Format: `'Name', # role comment` (comment on same line). Use `#` comments for role attribution, not parentheses in the string. No Twitter handles (enforced by msftidy). Balanced angle brackets for email (enforced by msftidy).
     ```ruby
     'Author' => [
       'Discoverer Name', # Vulnerability discovery
@@ -143,7 +143,7 @@ end
 2. Use `send_request_cgi({...})` — NEVER raw HTTP libraries
 3. Always check for `nil` response (timeout): `fail_with(Failure::Unreachable, '...') unless res`
 4. Always check body with `.to_s` before string operations: `res.body.to_s.include?('foo')` — `res.body` can be nil
-5. Use `normalize_uri(target_uri.path, 'endpoint')` for URL paths
+5. Use `normalize_uri(target_uri.path, 'endpoint')` for URL paths. `normalize_uri` does not percent-encode path segments — if you embed user-supplied values in a path (e.g. a username or identifier), encode special characters manually before passing them in (`str.gsub('@', '%40')` etc.).
 6. **Do NOT override `target_uri`** — the HttpClient mixin defines it. If you need the base path, use `datastore['TARGETURI']` directly.
 7. Register `TARGETURI` only if a sensible default differs from `'/'`:
     ```ruby
@@ -151,6 +151,13 @@ end
     ```
 8. **Do NOT re-register options that HttpClient already provides** — `RHOSTS`, `RPORT`, `VHOST`, `SSL`, `TARGETURI` are auto-registered by the mixin. Re-registering them causes duplicate options.
 9. Set sensible `DefaultOptions` for `RPORT` and `SSL`
+    ```ruby
+    'DefaultOptions' => {
+      'RPORT' => 443,
+      'SSL' => true
+    }
+    ```
+    Without this, the module defaults to port 80/plaintext even for HTTPS-only services.
 10. Use `res.get_json_document` to parse JSON responses — never manual `JSON.parse(res.body)`
 11. Use `res.get_html_document` for HTML parsing (returns a Nokogiri document) — useful for extracting CSRF tokens, form fields, version strings
 12. Use `Rex::Text::Table` for formatted output
@@ -299,7 +306,14 @@ ruby -e '
 
 ```bash
 cd /opt/metasploit-framework/embedded/framework
-rubocop --config .rubocop.yml /path/to/my_module.rb
+# Use the MSF-bundled rubocop binary, not the system one
+/opt/metasploit-framework/embedded/bin/rubocop --config .rubocop.yml /path/to/my_module.rb
+```
+
+If the framework is installed elsewhere, find the binary with:
+
+```bash
+find /opt -name rubocop -path '*/metasploit*' 2>/dev/null | head -1
 ```
 
 If the file is outside the framework `modules/` directory, `Style/Documentation` may still flag — this is a false positive that disappears when the file is in its final location.

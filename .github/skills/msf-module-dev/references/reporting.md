@@ -91,6 +91,18 @@ def report_cred(opts)
     status: Metasploit::Model::Login::Status::UNTRIED,
     proof: opts[:proof]
   }.merge(service_data)
+```
+
+**Important**: When `status` is `SUCCESSFUL` (i.e., the module verified the credential), you **must** also include `last_attempted_at: DateTime.now`. Without it, `create_credential_login` raises `ActiveRecord::RecordInvalid` ("Last attempted at can't be nil if status is tried"):
+
+```ruby
+  login_data = {
+    core: create_credential(credential_data),
+    status: Metasploit::Model::Login::Status::SUCCESSFUL,
+    last_attempted_at: DateTime.now,
+    proof: opts[:proof]
+  }.merge(service_data)
+```
 
   create_credential_login(login_data)
 end
