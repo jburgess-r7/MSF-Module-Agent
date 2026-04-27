@@ -196,6 +196,34 @@ report_service(
 
 ---
 
+## report_vuln
+
+Records a confirmed vulnerability in the MSF database. Call this when `check` (or `run`) has positively confirmed the vulnerability, so workspace operators know which hosts are affected.
+
+```ruby
+report_vuln(
+  host: rhost,
+  port: rport,
+  proto: 'tcp',
+  name: 'Vendor Product Unauthenticated RCE',
+  info: 'Confirmed via out-of-band callback',
+  refs: references
+)
+```
+
+| Key      | Type    | Description                                                              |
+| -------- | ------- | ------------------------------------------------------------------------ |
+| `:host`  | String  | **Required.** Target IP address                                          |
+| `:port`  | Integer | Port number                                                              |
+| `:proto` | String  | `'tcp'` or `'udp'`                                                       |
+| `:name`  | String  | Vulnerability name (human-readable)                                      |
+| `:info`  | String  | Additional detail on how it was confirmed                                |
+| `:refs`  | Array   | Pass `references` (auto-populated from module's `References` metadata)   |
+
+**When to call it**: whenever your module confirms the vulnerability is present, not just that the service is running. Usually call it from `run`, `run_host`, or `exploit` once confirmation is complete. Calling it from `check` is acceptable when the module intentionally records confirmation there. Reviewers will flag gather/scanner modules that confirm vulnerabilities but don't call `report_vuln`.
+
+---
+
 ## Rex::Text::Table
 
 For formatted console output and CSV export of results.

@@ -107,15 +107,16 @@ end
 
 ### Code Style
 
-1. **2-space indentation**, no tabs, no trailing whitespace
-2. **Single quotes** unless string interpolation is needed
-3. **No `require`** for MSF/Rex libs — they autoload. Never `require 'msf/core'` or `require 'nokogiri'` (already bundled). Only `require` for stdlib not loaded by framework (e.g., `require 'fiddle'`, `require 'ipaddr'`).
-4. **No `print`/`puts`** — use `print_status`, `print_good`, `print_error`, `print_warning`
-5. **No `rescue Exception`** — rescue specific errors or `StandardError`
-6. **No inline `rescue`** — `disconnect rescue nil` triggers RuboCop's `Style/RescueModifier`. Use a proper `begin`/`rescue` block or let the framework handle it.
-7. Hash values in `update_info` must start on the **same line** as their key
-8. The `update_info(` call must start on its **own line** after `super(`
-9. Multi-line `OptEnum`/`register_options` arrays: first element on a **new line** after `[`
+1. **`# frozen_string_literal: true`** — add this line at the top of every new Ruby file. MSF's `.rubocop.yml` disables the cop so it won't fail rubocop, but it is a framework convention and reviewers may request it.
+2. **2-space indentation**, no tabs, no trailing whitespace
+3. **Single quotes** unless string interpolation is needed
+4. **No `require`** for MSF/Rex libs — they autoload. Never `require 'msf/core'` or `require 'nokogiri'` (already bundled). Only `require` for stdlib not loaded by framework (e.g., `require 'fiddle'`, `require 'ipaddr'`).
+5. **No `print`/`puts`** — use `print_status`, `print_good`, `print_error`, `print_warning`
+6. **No `rescue Exception`** — rescue specific errors or `StandardError`
+7. **No inline `rescue`** — `disconnect rescue nil` triggers RuboCop's `Style/RescueModifier`. Use a proper `begin`/`rescue` block or let the framework handle it.
+8. Hash values in `update_info` must start on the **same line** as their key
+9. The `update_info(` call must start on its **own line** after `super(`
+10. Multi-line `OptEnum`/`register_options` arrays: first element on a **new line** after `[`
     ```ruby
     # GOOD
     OptEnum.new('MODE', [
@@ -125,7 +126,6 @@ end
     OptEnum.new('MODE', [true, 'Operation mode', 'check',
                          ['check', 'exploit']])
     ```
-10. Run `msftidy` and `rubocop` before submitting (see Validation section below)
 11. Use `Rex::Version` for version comparisons instead of manual major/minor/patch splitting
     ```ruby
     # GOOD
@@ -241,6 +241,7 @@ Use `include Msf::Auxiliary::Report` and call:
     - **Exception**: `File.write` is acceptable for **local** temp files needed during exploitation (e.g., writing to `Dir.mktmpdir` for git operations, creating local payload files). These must be cleaned up in the `cleanup` method.
 - **`create_credential` + `create_credential_login`** — for discovered credentials
 - **`report_service(host:, port:, proto:, name:)`** — to record identified services
+- **`report_vuln(host:, port:, proto:, name:, info:, refs:)`** — to record a confirmed vulnerability in the database once the module has positively confirmed it. Usually call this from `run`, `run_host`, or `exploit`; calling it from `check` is acceptable when the module intentionally records confirmation there. Pass `refs: references` to link the module's References array. See [references/reporting.md](./references/reporting.md).
 
 **Scanner/gather modules MUST report findings** — if your module discovers data but doesn't call `store_loot`, `report_vuln`, or `report_cred`, reviewers will reject it.
 
@@ -350,6 +351,7 @@ msf6 auxiliary(admin/http/my_module) > run
 
 Before submitting, verify:
 
+- [ ] `# frozen_string_literal: true` present at the top of new Ruby files
 - [ ] `ruby -c module.rb` — no syntax errors
 - [ ] `msftidy` — status 0, no warnings (file must be under a `modules/` path tree)
 - [ ] `rubocop --config .rubocop.yml` — no offenses (run from MSF framework dir)

@@ -15,12 +15,19 @@ The documentation file should contain these sections in order. Copy this structu
 ```markdown
 ## Vulnerable Application
 
-This module targets Acme WebApp versions prior to 4.2.1.
+This module exploits an authentication bypass in Acme WebApp versions prior to 4.2.1.
+An unauthenticated attacker can compute valid admin credentials via a weak key derivation
+in the /api/login endpoint. The vulnerability was confirmed on version 4.2.0.
+
 A dockerized test environment can be set up using the official Docker image:
 https://hub.docker.com/r/acme/webapp
 ```
 
-Explain how to set up the vulnerable environment. Include links to downloads, specific versions tested, installation steps, and Docker/Vagrant setup if available. Write so someone can reproduce the environment 5+ years later.
+This section must describe the vulnerability being exploited: what it is, what an attacker can do with it, and what access is required. Follow with the affected product/versions and setup instructions. Include links to downloads, advisories, specific versions tested, and Docker/Vagrant setup if available. Write so someone can reproduce the environment 5+ years later.
+
+Do NOT write a generic "this module targets X" without describing the actual vulnerability. Real examples from MSF:
+- "This module exploits an improper access control vulnerability (CVE-2023-6329) in Control iD iDSecure <= v4.7.43.0. It allows an unauthenticated remote attacker to compute valid credentials and to add a new administrative user."
+- "Attackers with knowledge of a valid username can provide a crafted S3 authentication header to the CrushFTP web API to authenticate as that user without valid credentials."
 
 ### Section 2: Verification Steps
 
