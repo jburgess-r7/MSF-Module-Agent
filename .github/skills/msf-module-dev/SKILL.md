@@ -107,7 +107,7 @@ end
 
 ### Code Style
 
-1. **`# frozen_string_literal: true`** — add this line after the license header, before the class definition. MSF's `.rubocop.yml` disables the cop so it won't fail rubocop, but it is a framework convention and reviewers may request it.
+1. **`# frozen_string_literal: true`** — add this line at the very top of every new Ruby file (line 1), before any comments or code. MSF's `.rubocop.yml` disables the cop so it won't fail rubocop, but it is a framework convention and reviewers may request it.
 2. **2-space indentation**, no tabs, no trailing whitespace
 3. **Single quotes** unless string interpolation is needed
 4. **No `require`** for MSF/Rex libs — they autoload. Never `require 'msf/core'` or `require 'nokogiri'` (already bundled). Only `require` for stdlib not loaded by framework (e.g., `require 'fiddle'`, `require 'ipaddr'`).
@@ -298,7 +298,7 @@ Use `fail_with(Failure::REASON, 'message')` — never `raise` or `abort`.
 | `Failure::BadConfig`       | Invalid module options                    |
 | `Failure::TimeoutExpired`  | Operation timed out                       |
 
-**Do NOT wrap `run`/`exploit` in a rescue block** — the framework catches exceptions at the top level. Wrapping the body of `run` in `rescue ::StandardError => e; print_error(e.message)` silently swallows errors that should propagate (this has been flagged and removed in Rapid7 code review).
+**Avoid broad rescue blocks that swallow errors silently** — the framework catches exceptions at the top level. Wrapping the entire body of `run` in `rescue ::StandardError => e; print_error(e.message)` silently hides errors that should propagate to the user. Specific rescues for known exceptions (e.g., `rescue Timeout::Error => e`) are acceptable; general error swallowing is not.
 
 ## Validation
 
@@ -370,7 +370,7 @@ msf6 auxiliary(admin/http/my_module) > run
 
 Before submitting, verify:
 
-- [ ] `# frozen_string_literal: true` present after the license header
+- [ ] `# frozen_string_literal: true` present at line 1 (before all code and comments)
 - [ ] `ruby -c module.rb` — no syntax errors
 - [ ] `msftidy` — status 0, no warnings (file must be under a `modules/` path tree)
 - [ ] `rubocop --config .rubocop.yml` — no offenses (run from MSF framework dir)
@@ -399,7 +399,7 @@ Before submitting, verify:
 - [ ] Uses `store_loot` for saving data (not `File.write`)
 - [ ] Scanner/gather modules report findings via `store_loot` or `report_cred`
 - [ ] Calls `report_vuln` in `run`/`exploit` after confirming the vulnerability
-- [ ] Calls `report_service` to record the target service in the database
+- [ ] Calls `report_service` when the module's purpose is to enumerate/detect services (scanner/gather modules)
 - [ ] Module documentation `.md` file exists with Verification Steps and Scenarios
 - [ ] Tested `check` and `run` against a real instance via `~/.msf4/modules/` or `loadpath`
 

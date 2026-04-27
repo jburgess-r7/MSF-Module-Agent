@@ -223,19 +223,19 @@ class MetasploitModule < Msf::Exploit::Remote
 
   def check
     # Return CheckCode values:
-    #   CheckCode::Safe          - definitely not vulnerable
-    #   CheckCode::Detected      - service detected, vuln status unknown
-    #   CheckCode::Appears       - likely vulnerable (version-based)
-    #   CheckCode::Vulnerable    - confirmed vulnerable (tested)
-    #   CheckCode::Unknown       - cannot determine
-    # Accepts optional reason: CheckCode::Appears('Version 1.0 detected')
+    #   Exploit::CheckCode::Safe          - definitely not vulnerable
+    #   Exploit::CheckCode::Detected      - service detected, vuln status unknown
+    #   Exploit::CheckCode::Appears       - likely vulnerable (version-based)
+    #   Exploit::CheckCode::Vulnerable    - confirmed vulnerable (tested)
+    #   Exploit::CheckCode::Unknown       - cannot determine
+    # Accepts optional reason: Exploit::CheckCode::Appears('Version 1.0 detected')
     res = send_request_cgi('uri' => normalize_uri(target_uri.path))
-    return CheckCode::Unknown('Connection failed') unless res
+    return Exploit::CheckCode::Unknown('Connection failed') unless res
 
-    if res.body.include?('VulnerableVersion')
-      CheckCode::Appears
+    if res.body.to_s.include?('VulnerableVersion')
+      Exploit::CheckCode::Appears
     else
-      CheckCode::Safe
+      Exploit::CheckCode::Safe
     end
   end
 
