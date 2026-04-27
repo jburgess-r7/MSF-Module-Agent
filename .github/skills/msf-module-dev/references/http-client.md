@@ -78,23 +78,32 @@ res = send_request_cgi(
 
 **POST with XML/SOAP body:**
 
+When constructing SOAP envelopes that embed user-supplied values (usernames, passwords, search terms), **always XML-escape** the values to prevent XML injection. Define a private helper:
+
 ```ruby
-soap_body = %(
-<soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope">
-  <soap:Body>
-    <AuthRequest xmlns="urn:vendorAuth">
-      <account by="name">#{xml_safe_user}</account>
-      <password>#{xml_safe_pass}</password>
-    </AuthRequest>
-  </soap:Body>
-</soap:Envelope>
-).strip
+def xml_escape(str)
+  str.to_s.gsub('&', '&amp;').gsub('<', '&lt;').gsub('>', '&gt;').gsub('"', '&quot;').gsub("'", '&apos;')
+end
+```
+
+SOAP 1.2 uses `application/soap+xml`; SOAP 1.1 uses `text/xml`. Match the target service's protocol version.
+
+```ruby
+# SOAP 1.2 example (application/soap+xml)
+body = '<AuthRequest xmlns="urn:vendorAuth">' \
+       "<account by=\"name\">#{xml_escape(datastore['USERNAME'])}</account>" \
+       "<password>#{xml_escape(datastore['PASSWORD'])}</password>" \
+       '</AuthRequest>'
+
+envelope = '<soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope">' \
+           "<soap:Body>#{body}</soap:Body>" \
+           '</soap:Envelope>'
 
 res = send_request_cgi(
   'method' => 'POST',
   'uri'    => normalize_uri(target_uri.path, 'service', 'soap'),
   'ctype'  => 'application/soap+xml; charset=UTF-8',
-  'data'   => soap_body
+  'data'   => envelope
 )
 ```
 
@@ -203,10 +212,16 @@ json = res.get_json_document
 fail_with(Failure::UnexpectedReply, 'Invalid JSON response') if json.empty?
 token = json['authToken'] || fail_with(Failure::UnexpectedReply, 'No auth token in response')
 
-# XML/SOAP response
+# XML/SOAP response — use get_xml_document or Nokogiri::XML directly
 xml = res.get_xml_document
 token = xml.at_xpath('//authToken')&.text
 fail_with(Failure::UnexpectedReply, 'Auth token not found in SOAP response') unless token
+
+# For SOAP responses with multiple namespaces, remove_namespaces! simplifies XPath:
+doc = Nokogiri::XML(res.body.to_s)
+doc.remove_namespaces!
+subject = doc.at_xpath('//Subject')&.text
+items = doc.xpath('//ItemId').map { |n| n['Id'] }
 
 # HTML scraping
 html = res.get_html_document

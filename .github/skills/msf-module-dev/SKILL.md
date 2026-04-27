@@ -160,20 +160,27 @@ end
     Without this, the module defaults to port 80/plaintext even for HTTPS-only services.
 10. Use `res.get_json_document` to parse JSON responses — never manual `JSON.parse(res.body)`
 11. Use `res.get_html_document` for HTML parsing (returns a Nokogiri document) — useful for extracting CSRF tokens, form fields, version strings
-12. Use `Rex::Text::Table` for formatted output
-13. Cookie jar is automatic with `keep_cookies: true` — don't manually track cookies with local variables
-14. **Password/credential option defaults**: Use `nil` for passwords, not empty string `''`. Empty string is only acceptable if the product's default password is literally blank.
+12. For XML/SOAP responses, use `res.get_xml_document` or `Nokogiri::XML(res.body.to_s)` — then `doc.remove_namespaces!` to simplify XPath queries across SOAP namespaces. See the [HttpClient reference](./references/http-client.md) for patterns.
+13. **XML escaping**: When injecting user input into SOAP/XML request bodies, always XML-escape the values to prevent XML injection. Define a private `xml_escape` helper or use `CGI.escapeHTML`:
+    ```ruby
+    def xml_escape(str)
+      str.to_s.gsub('&', '&amp;').gsub('<', '&lt;').gsub('>', '&gt;').gsub('"', '&quot;').gsub("'", '&apos;')
+    end
+    ```
+14. Use `Rex::Text::Table` for formatted output
+15. Cookie jar is automatic with `keep_cookies: true` — don't manually track cookies with local variables
+16. **Password/credential option defaults**: Use `nil` for passwords, not empty string `''`. Empty string is only acceptable if the product's default password is literally blank.
     ```ruby
     # GOOD — forces user to set a value
     OptString.new('PASSWORD', [true, 'Password', nil])
     # BAD — empty string implies blank is normal
     OptString.new('PASSWORD', [true, 'Password', ''])
     ```
-15. For payload-triggering requests that won't return (shell established), set `timeout` to 0 or 1:
+17. For payload-triggering requests that won't return (shell established), set `timeout` to 0 or 1:
     ```ruby
     send_request_cgi({ 'uri' => shell_uri, 'method' => 'POST' }, 1)
     ```
-16. For exploit modules, prefer `WfsDelay` (wait-for-session delay) over custom sleep options
+18. For exploit modules, prefer `WfsDelay` (wait-for-session delay) over custom sleep options
 
 ### Non-HTTP Modules (TCP, FTP, SMB, etc.)
 
@@ -225,6 +232,16 @@ Return `CheckCode` constants (not booleans) from `def check`:
 - `CheckCode::Appears('reason')` — likely vulnerable (version-based)
 - `CheckCode::Vulnerable('reason')` — confirmed vulnerable
 - `CheckCode::Unknown` — cannot determine
+
+**Namespace gotcha for Auxiliary modules**: In `Msf::Exploit::Remote` subclasses, bare `CheckCode::Vulnerable` resolves fine. In `Msf::Auxiliary` subclasses, you **must** use the fully qualified `Msf::Exploit::CheckCode::Vulnerable('reason')` (and likewise for `Safe`, `Detected`, etc.). Using the bare constant causes `NameError: uninitialized constant`.
+
+```ruby
+# In Msf::Auxiliary — MUST use full namespace
+def check
+  return Msf::Exploit::CheckCode::Detected('Service found') if service_present?
+  Msf::Exploit::CheckCode::Safe('Not found')
+end
+```
 
 **Key rules from PR reviews:**
 
@@ -280,6 +297,8 @@ Use `fail_with(Failure::REASON, 'message')` — never `raise` or `abort`.
 | `Failure::Unreachable`     | Connection refused, timeout, nil response |
 | `Failure::BadConfig`       | Invalid module options                    |
 | `Failure::TimeoutExpired`  | Operation timed out                       |
+
+**Do NOT wrap `run`/`exploit` in a rescue block** — the framework catches exceptions at the top level. Wrapping the body of `run` in `rescue ::StandardError => e; print_error(e.message)` silently swallows errors that should propagate (this has been flagged and removed in Rapid7 code review).
 
 ## Validation
 
@@ -370,6 +389,7 @@ Before submitting, verify:
 - [ ] All response body access uses `.to_s` (e.g., `res.body.to_s.include?('...')`)
 - [ ] Payload-triggering requests use `timeout: 0` or `1`
 - [ ] JSON parsed via `res.get_json_document`, not `JSON.parse`
+- [ ] XML/SOAP modules XML-escape all user input injected into request bodies
 - [ ] All TCP `connect` calls handle `Rex::ConnectionError` (non-HTTP modules)
 - [ ] Scanner modules implement `run_host(ip)`, not `run`
 - [ ] Local exploit / post modules specify `SessionTypes`
