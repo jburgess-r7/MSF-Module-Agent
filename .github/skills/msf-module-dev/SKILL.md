@@ -107,7 +107,7 @@ end
 
 ### Code Style
 
-1. **`# frozen_string_literal: true`** — add this line at the top of every new Ruby file. MSF's `.rubocop.yml` disables the cop so it won't fail rubocop, but it is a framework convention and reviewers may request it.
+1. **`# frozen_string_literal: true`** — add this line after the license header, before the class definition. MSF's `.rubocop.yml` disables the cop so it won't fail rubocop, but it is a framework convention and reviewers may request it.
 2. **2-space indentation**, no tabs, no trailing whitespace
 3. **Single quotes** unless string interpolation is needed
 4. **No `require`** for MSF/Rex libs — they autoload. Never `require 'msf/core'` or `require 'nokogiri'` (already bundled). Only `require` for stdlib not loaded by framework (e.g., `require 'fiddle'`, `require 'ipaddr'`).
@@ -370,7 +370,7 @@ msf6 auxiliary(admin/http/my_module) > run
 
 Before submitting, verify:
 
-- [ ] `# frozen_string_literal: true` present at the top of new Ruby files
+- [ ] `# frozen_string_literal: true` present after the license header
 - [ ] `ruby -c module.rb` — no syntax errors
 - [ ] `msftidy` — status 0, no warnings (file must be under a `modules/` path tree)
 - [ ] `rubocop --config .rubocop.yml` — no offenses (run from MSF framework dir)
@@ -398,6 +398,8 @@ Before submitting, verify:
 - [ ] Uses `cleanup` method for artifact removal (not manual cleanup at end of exploit)
 - [ ] Uses `store_loot` for saving data (not `File.write`)
 - [ ] Scanner/gather modules report findings via `store_loot` or `report_cred`
+- [ ] Calls `report_vuln` in `run`/`exploit` after confirming the vulnerability
+- [ ] Calls `report_service` to record the target service in the database
 - [ ] Module documentation `.md` file exists with Verification Steps and Scenarios
 - [ ] Tested `check` and `run` against a real instance via `~/.msf4/modules/` or `loadpath`
 

@@ -5,12 +5,12 @@ Complete annotated template for an auxiliary HTTP module. Adapt for exploit modu
 ## Auxiliary Gather Module (HTTP + Authentication + Data Exfiltration)
 
 ```ruby
-# frozen_string_literal: true
-
 ##
 # This module requires Metasploit: https://metasploit.com/download
 # Current source: https://github.com/rapid7/metasploit-framework
 ##
+
+# frozen_string_literal: true
 
 class MetasploitModule < Msf::Auxiliary
   include Msf::Exploit::Remote::HttpClient
@@ -101,6 +101,23 @@ class MetasploitModule < Msf::Auxiliary
 
     # 3. Report results
     print_good("Exploit URL: #{exploit_url}")
+
+    report_vuln(
+      host: rhost,
+      port: rport,
+      proto: 'tcp',
+      name: 'Vendor Product Vulnerability Type',
+      info: 'Brief confirmation of what was exploited.',
+      refs: references
+    )
+
+    report_service(
+      host: rhost,
+      port: rport,
+      proto: 'tcp',
+      name: ssl ? 'https' : 'http',
+      info: 'Vendor Product Name'
+    )
   end
 
   private
