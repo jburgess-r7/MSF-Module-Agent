@@ -22,9 +22,9 @@ For deeper reference on specific topics, load the appropriate file:
 
 ## Your Workflow
 
-1. **Study the target**: If a PoC or vulnerability description is provided, read it thoroughly. Identify the attack flow, required authentication, HTTP methods, data formats (SOAP, REST, JSON, form), and what data is exfiltrated or what effect is achieved.
+1. **Study the target**: If a PoC or vulnerability description is provided, read it thoroughly. Identify the attack flow, required access level, and what data is exfiltrated or what effect is achieved. For remote modules: HTTP methods, data formats (SOAP, REST, JSON, form), authentication scheme. For local/post modules: session requirements, privilege boundaries, command execution flow, file operations.
 
-2. **Choose module type**: Based on the skill's classification guide, determine the correct module type (`auxiliary/gather/`, `auxiliary/admin/`, `auxiliary/scanner/`, `exploit/multi/http/`, etc.) and required mixins.
+2. **Choose module type**: Based on the skill's classification guide, determine the correct module type (`auxiliary/gather/`, `auxiliary/admin/`, `auxiliary/scanner/`, `exploit/multi/http/`, `post/linux/gather/`, etc.) and required mixins. See [Non-HTTP Module Patterns](../skills/msf-module-dev/references/non-http-modules.md) for local exploit and post module templates.
 
 3. **Write the module**: Follow the skill's structural template exactly. Every module MUST include:
     - License header comment
@@ -46,20 +46,32 @@ For deeper reference on specific topics, load the appropriate file:
 
 ## Constraints
 
+### All module types
+
 - NEVER guess at MSF API methods — always verify against the skill references or the framework source at `/opt/metasploit-framework/embedded/framework/`
 - NEVER use `require` for standard MSF libraries — they are autoloaded
 - NEVER use `print` or `puts` — use `print_status`, `print_good`, `print_error`, `print_warning`, `vprint_status`
 - NEVER hardcode paths, IPs, or credentials in module source
 - NEVER re-register options that mixins already provide (RHOSTS, RPORT, VHOST, SSL, TARGETURI)
-- NEVER override `target_uri` — it's defined by HttpClient
 - NEVER use `File.write` to save data — use `store_loot`
 - NEVER call `fail_with` or raise inside a `check` method — return CheckCode constants
-- ALWAYS use `normalize_uri` and `target_uri` for URL construction
-- ALWAYS use `send_request_cgi` (not raw HTTP libraries) for HTTP modules
-- ALWAYS handle `nil` responses from `send_request_cgi` (timeout/connection failure)
-- ALWAYS guard `res.body` with `.to_s` before string operations
-- ALWAYS use `res.get_json_document` — never manual `JSON.parse`
 - ALWAYS use `Rex::Version` for version comparisons
 - ALWAYS use 2-space indentation, no tabs
 - ALWAYS set password option defaults to `nil`, not empty string
 - String delimiters: single quotes unless interpolation is needed
+
+### HTTP modules (auxiliary, exploit with HttpClient)
+
+- NEVER override `target_uri` — it's defined by HttpClient
+- ALWAYS use `normalize_uri` and `target_uri` for URL construction
+- ALWAYS use `send_request_cgi` (not raw HTTP libraries)
+- ALWAYS handle `nil` responses from `send_request_cgi` (timeout/connection failure)
+- ALWAYS guard `res.body` with `.to_s` before string operations
+- ALWAYS use `res.get_json_document` — never manual `JSON.parse`
+
+### Post and local exploit modules
+
+- MUST specify `SessionTypes` (and `Platform` for post modules)
+- Use `cmd_exec` for command execution, `write_file`/`read_file` from `Msf::Post::File` for file operations
+- Use `session.session_host` (not `rhost`) as the host parameter for `store_loot` and `report_vuln`
+- Use `fail_with` for precondition failures (not `print_error` + `return`) so the framework reports failure status correctly
