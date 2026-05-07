@@ -5,8 +5,6 @@ Complete annotated template for an auxiliary HTTP module. Adapt for exploit modu
 ## Auxiliary Gather Module (HTTP + Authentication + Data Exfiltration)
 
 ```ruby
-# frozen_string_literal: true
-
 ##
 # This module requires Metasploit: https://metasploit.com/download
 # Current source: https://github.com/rapid7/metasploit-framework

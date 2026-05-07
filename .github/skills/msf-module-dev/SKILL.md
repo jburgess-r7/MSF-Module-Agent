@@ -107,8 +107,7 @@ end
 
 ### Code Style
 
-1. **`# frozen_string_literal: true`** — add this line at the very top of every new Ruby file (line 1), before any comments or code. MSF's `.rubocop.yml` disables the cop so it won't fail rubocop, but it is a framework convention and reviewers may request it.
-2. **2-space indentation**, no tabs, no trailing whitespace
+1. **2-space indentation**, no tabs, no trailing whitespace
 3. **Single quotes** unless string interpolation is needed
 4. **No `require`** for MSF/Rex libs — they autoload. Never `require 'msf/core'` or `require 'nokogiri'` (already bundled). Only `require` for stdlib not loaded by framework (e.g., `require 'fiddle'`, `require 'ipaddr'`).
 5. **No `print`/`puts`** — use `print_status`, `print_good`, `print_error`, `print_warning`
@@ -370,7 +369,6 @@ msf6 auxiliary(admin/http/my_module) > run
 
 Before submitting, verify:
 
-- [ ] `# frozen_string_literal: true` present at line 1 (before all code and comments)
 - [ ] `ruby -c module.rb` — no syntax errors
 - [ ] `msftidy` — status 0, no warnings (file must be under a `modules/` path tree)
 - [ ] `rubocop --config .rubocop.yml` — no offenses (run from MSF framework dir)
