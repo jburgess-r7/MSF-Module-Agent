@@ -128,6 +128,29 @@ Opt::Proxies       # Proxy chain support
 }
 ```
 
+**Do not set `PAYLOAD` in `DefaultOptions`** unless multiple compatible payloads exist and you want to override the MSF default selection. If the `Payload` compat block restricts to one payload type, MSF will select it automatically and a hardcoded default is unnecessary noise.
+
+## DefangedMode (destructive modules)
+
+Use `DefangedMode` instead of a custom boolean guard whenever a module makes **irreversible changes** to the target (password changes, config modifications, data deletion). This is the established MSF convention for destructive modules.
+
+```ruby
+# In register_options:
+OptBool.new('DefangedMode', [true, 'Run in defanged mode', true]),
+
+# In exploit:
+if datastore['DefangedMode']
+  fail_with(Failure::BadConfig, <<~MSG)
+    This module makes irreversible changes to the target.
+    Set DefangedMode to false if you have authorization to proceed.
+  MSG
+end
+```
+
+- Default is `true` (blocked). The operator must explicitly set `DefangedMode false`.
+- Do **not** pair this with a separate custom acknowledge option — `DefangedMode` covers both the gate and the user-facing explanation.
+- Reference: `modules/exploits/windows/smb/smb_doublepulsar_rce.rb`
+
 ## Actions (Auxiliary modules with multiple modes)
 
 ```ruby
@@ -155,6 +178,8 @@ Access in `run` via `action.name`.
 'DefaultTarget' => 0,
 'Privileged' => false
 ```
+
+**Target naming**: Use `'Automatic'` as the target name for single-target modules or the default auto-detection target in multi-target modules. Avoid descriptive names like `'Unix Command'` when there is only one option — reviewers will flag it.
 
 ## DisclosureDate
 

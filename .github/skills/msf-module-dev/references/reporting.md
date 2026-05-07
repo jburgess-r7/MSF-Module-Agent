@@ -196,6 +196,59 @@ report_service(
 
 ---
 
+## store_valid_credential (Msf::Module::Auth)
+
+A simpler alternative to the full `create_credential_and_login` pattern. Uses keyword arguments. **Defined in `Msf::Module::Auth`** (auto-included in all modules). Stores credentials and associates them with a service in the database.
+
+```ruby
+store_valid_credential(
+  user: 'admin',
+  private: 'secret',
+  private_type: :password,         # default; :ssh_key, :ntlm_hash also valid
+  service_data: {
+    address: rhost,
+    port: rport,
+    service_name: 'ssh',           # match the actual service, not the exploit transport
+    protocol: 'tcp',
+    workspace_id: myworkspace_id
+  }
+)
+```
+
+- If `service_data` is omitted and the module includes `HttpClient`, defaults to `service_details` (the HTTP service on `rhost:rport`). **Always pass explicit `service_data`** when the credential belongs to a different port/protocol (e.g., SSH on port 22 when the exploit went through HTTP on port 443).
+- Reviewers will flag exploit modules that discover or set credentials without saving them.
+- **When the module sets a known credential** (e.g., password change during exploitation), store the final persistent credential, not the intermediate one. If rotation fails, at minimum log a warning so the operator knows what credential is active.
+- See `lib/msf/core/module/auth.rb` for the full implementation.
+
+---
+
+## Msf::Exploit::Retry — retry_until_truthy
+
+For polling operations that require waiting on asynchronous target-side state, use `retry_until_truthy` instead of manual `N.times` + `Rex.sleep` loops. This mixin is in `lib/msf/core/exploit/retry.rb`.
+
+```ruby
+include Msf::Exploit::Retry
+
+# Register an advanced option:
+register_advanced_options([
+  OptInt.new('OPERATION_TIMEOUT', [true, 'Seconds to wait for the operation to complete', 30]),
+])
+
+# Use in the module:
+result = retry_until_truthy(timeout: datastore['OPERATION_TIMEOUT']) do
+  res = send_request_cgi(...)
+  res&.code == 200 && res.body.to_s.include?('expected_marker')
+end
+fail_with(Failure::Unknown, 'Operation did not complete within timeout') unless result
+```
+
+- Expose the timeout as an **advanced option** (not a regular option) so it doesn't clutter `show options` but remains tunable.
+- The block must return a **truthy value** to stop retrying, or `false`/`nil` to keep trying.
+- Uses exponential backoff internally — no manual `sleep` needed.
+- Reference: `modules/exploits/linux/misc/cisco_ios_xe_rce.rb`
+
+---
+
 ## report_vuln
 
 Records a confirmed vulnerability in the MSF database. Call this when `check` (or `run`) has positively confirmed the vulnerability, so workspace operators know which hosts are affected.
