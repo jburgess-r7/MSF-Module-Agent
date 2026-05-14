@@ -19,6 +19,8 @@ The Scanner mixin handles RHOSTS iteration, threading, and progress display. You
 ### Scanner template
 
 ```ruby
+# frozen_string_literal: true
+
 class MetasploitModule < Msf::Auxiliary
   include Msf::Exploit::Remote::HttpClient  # or Tcp, Ftp, SMB, etc.
   include Msf::Auxiliary::Scanner            # MUST come after protocol mixins
@@ -95,6 +97,8 @@ For raw TCP services without a dedicated protocol mixin.
 ### TCP module pattern
 
 ```ruby
+# frozen_string_literal: true
+
 class MetasploitModule < Msf::Auxiliary
   include Msf::Exploit::Remote::Tcp
   include Msf::Auxiliary::Report
@@ -204,6 +208,8 @@ For privilege escalation and post-exploitation exploits that require an existing
 ### Local exploit template
 
 ```ruby
+# frozen_string_literal: true
+
 class MetasploitModule < Msf::Exploit::Local
   Rank = ExcellentRanking
 

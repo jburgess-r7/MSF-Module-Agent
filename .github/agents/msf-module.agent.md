@@ -24,6 +24,8 @@ For deeper reference on specific topics, load the appropriate file:
 
 1. **Study the target**: If a PoC or vulnerability description is provided, read it thoroughly. Identify the attack flow, required access level, and what data is exfiltrated or what effect is achieved. For remote modules: HTTP methods, data formats (SOAP, REST, JSON, form), authentication scheme. For local/post modules: session requirements, privilege boundaries, command execution flow, file operations.
 
+    Before writing a new module, check there is no existing module or open pull request that already covers the same vulnerability.
+
 2. **Choose module type**: Based on the skill's classification guide, determine the correct module type (`auxiliary/gather/`, `auxiliary/admin/`, `auxiliary/scanner/`, `exploit/multi/http/`, `post/linux/gather/`, etc.) and required mixins. See [Non-HTTP Module Patterns](../skills/msf-module-dev/references/non-http-modules.md) for local exploit and post module templates.
 
 3. **Write the module**: Follow the skill's structural template exactly. Every module MUST include:
@@ -48,9 +50,11 @@ For deeper reference on specific topics, load the appropriate file:
 
 ### All module types
 
+- ALWAYS add `# frozen_string_literal: true` as the very first line of every new `.rb` file (before the license header)
 - NEVER guess at MSF API methods — always verify against the skill references or the framework source at `/opt/metasploit-framework/embedded/framework/`
 - NEVER use `require` for standard MSF libraries — they are autoloaded
 - NEVER use `print` or `puts` — use `print_status`, `print_good`, `print_error`, `print_warning`, `vprint_status`
+- ALWAYS start `print_*` messages with a capital letter
 - NEVER hardcode paths, IPs, or credentials in module source
 - NEVER re-register options that mixins already provide (RHOSTS, RPORT, VHOST, SSL, TARGETURI)
 - NEVER use `File.write` to save data — use `store_loot`
@@ -59,9 +63,16 @@ For deeper reference on specific topics, load the appropriate file:
 - ALWAYS use 2-space indentation, no tabs
 - ALWAYS set password option defaults to `nil`, not empty string
 - String delimiters: single quotes unless interpolation is needed
+- Method parameter names must be at least 2 characters (except well-known crypto abbreviations)
+- Use `Faker` for generating fake usernames/accounts — not `Rex::Text.rand_text_alphanumeric`
+- Use `Rex::Socket.to_authority(ip, port)` for host:port formatting (IPv6 safe) — never `"#{ip}:#{port}"`
+- When overriding `cleanup`, always call `super` to ensure the parent mixin chain cleans up connections and sessions
+- Don't set a default payload in modules — let the framework choose automatically
+- Prefer `prepend Msf::Exploit::Remote::AutoCheck` over manually calling `check` inside `exploit`
 
 ### HTTP modules (auxiliary, exploit with HttpClient)
 
+- Use `SCREAMING_SNAKE_CASE` option names and `CamelCase` advanced option names
 - NEVER override `target_uri` — it's defined by HttpClient
 - ALWAYS use `normalize_uri` and `target_uri` for URL construction
 - ALWAYS use `send_request_cgi` (not raw HTTP libraries)
@@ -72,6 +83,7 @@ For deeper reference on specific topics, load the appropriate file:
 ### Post and local exploit modules
 
 - MUST specify `SessionTypes` (and `Platform` for post modules)
-- Use `cmd_exec` for command execution, `write_file`/`read_file` from `Msf::Post::File` for file operations
+- Use `create_process(executable, args: [], time_out: 15, opts: {})` instead of deprecated `cmd_exec` with separate arguments. `cmd_exec(command)` with a single string is still acceptable.
+- Use `write_file`/`read_file` from `Msf::Post::File` for file operations
 - Use `session.session_host` (not `rhost`) as the host parameter for `store_loot` and `report_vuln`
 - Use `fail_with` for precondition failures (not `print_error` + `return`) so the framework reports failure status correctly
