@@ -79,7 +79,8 @@ class MetasploitModule < Msf::Auxiliary
       OptString.new('PASSWORD', [true, 'Password for the specified user', nil]),
       # Password defaults MUST be nil, not ''. Empty string implies
       # a blank password is normal for the product.
-      OptString.new('TARGETURI', [true, 'Base path to the application', '/']),
+      # NOTE: TARGETURI is auto-registered by HttpClient with default '/'.
+      # Only re-register it if the app uses a different base path.
       OptString.new('VICTIM', [false, 'Target email or user to attack', '']),
       OptString.new('FOLDER', [true, 'Mail folder to dump', 'inbox'])
     ])
@@ -218,9 +219,11 @@ class MetasploitModule < Msf::Exploit::Remote
       )
     )
 
-    register_options([
-      OptString.new('TARGETURI', [true, 'Base path', '/'])
-    ])
+    # TARGETURI is auto-registered by HttpClient with default '/'.
+    # Only re-register if the app uses a different base path, e.g.:
+    #   register_options([
+    #     OptString.new('TARGETURI', [true, 'Base path', '/webapp'])
+    #   ])
   end
 
   def check

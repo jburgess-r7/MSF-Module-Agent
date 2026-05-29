@@ -242,9 +242,6 @@ class MetasploitModule < Msf::Exploit::Local
           ['Automatic', {}]
         ],
         'DefaultTarget' => 0,
-        'DefaultOptions' => {
-          'PAYLOAD' => 'linux/x64/meterpreter/reverse_tcp'
-        },
         'Privileged' => true,
         'Notes' => {
           'Stability' => [CRASH_SAFE],

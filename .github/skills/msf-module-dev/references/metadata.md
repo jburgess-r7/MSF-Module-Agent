@@ -135,7 +135,7 @@ Opt::Proxies       # Proxy chain support
 Use `DefangedMode` instead of a custom boolean guard whenever a module makes **irreversible changes** to the target (password changes, config modifications, data deletion). This is the established MSF convention for destructive modules.
 
 ```ruby
-# In register_options:
+# In register_advanced_options:
 OptBool.new('DefangedMode', [true, 'Run in defanged mode', true]),
 
 # In exploit:

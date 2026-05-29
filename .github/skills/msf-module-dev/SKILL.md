@@ -116,14 +116,16 @@ end
 1. **2-space indentation**, no tabs, no trailing whitespace
 2. **`# frozen_string_literal: true`** as the very first line of every new `.rb` file (before the license header). The RuboCop cop is disabled project-wide for legacy code, but new files must include it.
 3. **Single quotes** unless string interpolation is needed
-4. **No `require`** for MSF/Rex libs — they autoload. Never `require 'msf/core'` or `require 'nokogiri'` (already bundled). Only `require` for stdlib not loaded by framework (e.g., `require 'fiddle'`, `require 'ipaddr'`).
-5. **No `print`/`puts`** — use `print_status`, `print_good`, `print_error`, `print_warning`
-6. **All `print_*` messages must start with a capital letter**
-7. **No `rescue Exception`** — rescue specific errors or `StandardError`
-8. **No inline `rescue`** — `disconnect rescue nil` triggers RuboCop's `Style/RescueModifier`. Use a proper `begin`/`rescue` block or let the framework handle it.
-9. Hash values in `update_info` must start on the **same line** as their key
-10. The `update_info(` call must start on its **own line** after `super(`
-11. Multi-line `OptEnum`/`register_options` arrays: first element on a **new line** after `[` 
+4. **No enforced line length limit**, but keep code readable. MSF's `.rubocop.yml` disables `Layout/LineLength`.
+5. **Multiline block comments** are acceptable for embedded code snippets and payloads (e.g., inline shell scripts, SOAP templates). Don't refactor these into single-line strings.
+6. **No `require`** for MSF/Rex libs — they autoload. Never `require 'msf/core'` or `require 'nokogiri'` (already bundled). Only `require` for stdlib not loaded by framework (e.g., `require 'fiddle'`, `require 'ipaddr'`).
+7. **No `print`/`puts`** — use `print_status`, `print_good`, `print_error`, `print_warning`. Use `vprint_*` variants for verbose-only output.
+8. **All `print_*` messages must start with a capital letter**
+9. **No `rescue Exception`** — rescue specific errors or `StandardError`
+10. **No inline `rescue`** — `disconnect rescue nil` triggers RuboCop's `Style/RescueModifier`. Use a proper `begin`/`rescue` block or let the framework handle it.
+11. Hash values in `update_info` must start on the **same line** as their key
+12. The `update_info(` call must start on its **own line** after `super(`
+13. Multi-line `OptEnum`/`register_options` arrays: first element on a **new line** after `[` 
     ```ruby
     # GOOD
     OptEnum.new('MODE', [
@@ -133,7 +135,7 @@ end
     OptEnum.new('MODE', [true, 'Operation mode', 'check',
                          ['check', 'exploit']])
     ```
-12. Use `Rex::Version` for version comparisons instead of manual major/minor/patch splitting
+14. Use `Rex::Version` for version comparisons instead of manual major/minor/patch splitting
     ```ruby
     # GOOD
     Rex::Version.new(version) < Rex::Version.new('4.2.1')
@@ -141,32 +143,49 @@ end
     major, minor, patch = version.split('.').map(&:to_i)
     if major < 4 || (major == 4 && minor < 2)
     ```
-13. Prefer hash return values over arrays for methods returning multiple distinct items. Use kwargs for reusable APIs.
-14. Don't use `get_`/`set_` prefixes for accessor methods in new code
-15. Method parameter names must be at least 2 characters (except well-known crypto abbreviations)
-16. Prefer module mixin APIs over reimplementing core functionality
-17. Use `Faker` (e.g. `Faker::Internet.password`, `Faker::Internet.username`) for generating fake usernames/accounts — not `Rex::Text.rand_text_alphanumeric`
-18. Use `Rex::Socket.to_authority(ip, port)` instead of `"#{ip}:#{port}"` for host:port formatting — handles IPv6 addresses correctly
-19. Use `Rex::Stopwatch.elapsed_time` to track elapsed time
-20. Use `Rex::MIME::Message` for constructing MIME messages — don't hardcode MIME boundaries
-21. Use `Rex::RandomIdentifier::Generator` for generating random variable names, specifying the target language to avoid generating language keywords
-22. Don't set a default payload (`DefaultOptions` with `'PAYLOAD'`) in modules unless absolutely necessary — let the framework choose the most appropriate payload automatically
-23. Use `Msf::Exploit::SQLi` mixin when exploiting SQL injection vulnerabilities
-24. If there is only one action in an exploit, omit `Actions`/`DefaultAction` unless there is a clear reason to keep them
-25. When checking for a string in a response, consider whether it will always be in English across different locales/versions
-26. Ensure hardcoded strings used in regex matching will be consistent across multiple software versions
-27. When opening a file on the target, verify the file exists first
-28. Use the TEST-NET-1 range (`192.0.2.0/24`) for example/non-routable IP addresses in unit tests and spec files. Local/private IPs are fine in module documentation scenarios.
+15. Prefer hash return values over arrays for methods returning multiple distinct items. Use kwargs for reusable APIs.
+16. Don't use `get_`/`set_` prefixes for accessor methods in new code
+17. Method parameter names must be at least 2 characters (except well-known crypto abbreviations)
+18. Prefer module mixin APIs over reimplementing core functionality
+19. Use `Faker` (e.g. `Faker::Internet.password`, `Faker::Internet.username`) for generating fake usernames/accounts — not `Rex::Text.rand_text_alphanumeric`
+20. Use `Rex::Socket.to_authority(ip, port)` instead of `"#{ip}:#{port}"` for host:port formatting — handles IPv6 addresses correctly
+21. Use `Rex::Stopwatch.elapsed_time` to track elapsed time
+22. Use `Rex::MIME::Message` for constructing MIME messages — don't hardcode MIME boundaries
+23. Use `Rex::RandomIdentifier::Generator` for generating random variable names, specifying the target language to avoid generating language keywords
+24. Don't set a default payload (`DefaultOptions` with `'PAYLOAD'`) in modules unless absolutely necessary — let the framework choose the most appropriate payload automatically
+25. Use `Msf::Exploit::SQLi` mixin when exploiting SQL injection vulnerabilities
+26. If there is only one action in an exploit, omit `Actions`/`DefaultAction` unless there is a clear reason to keep them
+27. When checking for a string in a response, consider whether it will always be in English across different locales/versions
+28. Ensure hardcoded strings used in regex matching will be consistent across multiple software versions
+29. When opening a file on the target, verify the file exists first
+30. Use the TEST-NET-1 range (`192.0.2.0/24`) for example/non-routable IP addresses in unit tests and spec files. Local/private IPs are fine in module documentation scenarios.
+31. When adding complex binary or protocol parsing (e.g. `BinData`, `RASN1`, `Rex::Struct2`), include a code comment linking to the specification or RFC that defines the format being implemented.
+32. **Prefer Ruby** for modules. Go and Python modules are accepted but their external runtimes don't support the full framework API (e.g. network pivoting). Ruby modules don't have this limitation.
 
 ### Common Patterns
 
 - Register options with `register_options` and `register_advanced_options`
 - Use `SCREAMING_SNAKE_CASE` option names and `CamelCase` advanced option names
 - Use `datastore['OPTION_NAME']` to access module options
-- Use `print_status`, `print_good`, `print_error`, `print_warning` for console output
-- Use `vprint_*` variants for verbose-only output
-- Use `send_request_cgi` for HTTP requests in modules
 - Use `connect`/`disconnect` for TCP socket operations
+- Use `retry_until_truthy(timeout: datastore['MyTimeout']) { ... }` for polling async conditions instead of manual `Rex.sleep` + loop. Expose the timeout as an advanced datastore option.
+- For destructive modules, register `DefangedMode` as an **advanced** option (consistent with existing MSF modules). Gate destructive actions behind it and emit a clear `fail_with(Failure::BadConfig, ...)` message explaining why and how to override.
+- Use option `conditions` to conditionally show/hide options based on other option values:
+    ```ruby
+    OptString.new('REPO_OWNER', [false, 'Repository owner', nil],
+      conditions: %w[EXPLOIT_METHOD == existing_repo])
+    ```
+- For modules with multiple targets, use `target['Type']` (a custom symbol in the target hash) for dispatch logic — don't store sentinel values in instance variables:
+    ```ruby
+    # GOOD
+    case target['Type']
+    when :unix_cmd then ...
+    when :win_cmd then ...
+    end
+    # BAD
+    @payload_content = :win_dropper  # sentinel
+    if @payload_content == :win_dropper
+    ```
 
 ### HTTP Modules
 
@@ -176,7 +195,7 @@ end
 4. Always check body with `.to_s` before string operations: `res.body.to_s.include?('foo')` — `res.body` can be nil
 5. Use `normalize_uri(target_uri.path, 'endpoint')` for URL paths. `normalize_uri` does not percent-encode path segments — if you embed user-supplied values in a path (e.g. a username or identifier), encode special characters manually before passing them in (`str.gsub('@', '%40')` etc.).
 6. **Do NOT override `target_uri`** — the HttpClient mixin defines it. If you need the base path, use `datastore['TARGETURI']` directly.
-7. **Do NOT re-register options that HttpClient already provides** — `RHOSTS`, `RPORT`, `VHOST`, `SSL`, `TARGETURI` are auto-registered by the mixin. Re-registering them causes duplicate options.
+7. **Do NOT re-register `RHOSTS`, `RPORT`, `VHOST`, or `SSL`** — they are auto-registered by HttpClient. Use `DefaultOptions` to change their defaults. `TARGETURI` may be re-registered only when the application uses a non-root base path (e.g., `'/webapp'`).
 8. Set sensible `DefaultOptions` for `RPORT` and `SSL`
     ```ruby
     'DefaultOptions' => {
@@ -203,11 +222,27 @@ end
     # BAD — empty string implies blank is normal
     OptString.new('PASSWORD', [true, 'Password', ''])
     ```
-16. For payload-triggering requests that won't return (shell established), set `timeout` to 0 or 1:
+16. **Do NOT hardcode `send_request_cgi` timeout** — use the framework default unless there is a specific technical reason (e.g. payload trigger). Custom timeouts must be justified.
     ```ruby
+    # GOOD — default timeout
+    send_request_cgi({ 'uri' => uri, 'method' => 'GET' })
+    # GOOD — payload trigger that won't return
     send_request_cgi({ 'uri' => shell_uri, 'method' => 'POST' }, 1)
+    # BAD — arbitrary hardcoded timeout
+    send_request_cgi({ 'uri' => uri, 'method' => 'GET' }, 10)
     ```
-17. For exploit modules, prefer `WfsDelay` (wait-for-session delay) over custom sleep options
+17. **Extract HTML form values with Nokogiri, not regex** — use `res.get_html_document` or `res.get_xml_document` with XPath/CSS selectors to extract CSRF tokens, form fields, and other HTML data. Don't use raw regex on HTML.
+    ```ruby
+    # GOOD — Nokogiri XPath
+    doc = res.get_html_document
+    csrf = doc.at('input[@name="_csrf"]')&.[]('value')
+    # or via get_xml_document:
+    doc = res.get_xml_document
+    csrf = doc.xpath("//input[@name='_csrf']/@value")&.text
+    # BAD — raw regex on HTML
+    match = res.body.to_s.match(/<input [^>]*name="_csrf"[^>]*value="([^"]+)"/)
+    ```
+18. For exploit modules, prefer `WfsDelay` (wait-for-session delay) over custom sleep options
 
 ### Non-HTTP Modules (TCP, FTP, SMB, etc.)
 
@@ -225,7 +260,9 @@ When an exploit module supports binary payloads (dropper targets), choose the ri
 - **CmdStager** (`include Msf::Exploit::CmdStager`): Splits a binary payload into small chunks delivered via the command injection channel itself. Useful when the target has no outbound HTTP/network access. Flavors: `printf`, `bourne`, `wget`, `curl`, `certutil`, `psh_invokewebrequest`.
 - **Fetch payloads** (e.g., `fetch/linux/x64/meterpreter/reverse_tcp`): MSF starts an HTTP server and the target downloads the payload binary via `curl`/`wget`. Simpler and more reliable than CmdStager when the target can reach the attacker's HTTP server.
 
-**Guidance**: If the target environment has `curl`/`wget` available (most Linux servers), fetch payloads are simpler and preferred. CmdStager is useful when outbound HTTP is blocked or the tools aren't available. Consider offering both via separate targets if the exploit channel supports it.
+**Guidance**: If the target environment has `curl`/`wget` available (most Linux servers), fetch payloads are simpler and preferred. CmdStager is useful when outbound HTTP is blocked or the tools aren't available.
+
+**Prefer fetch over dropper targets**: Instead of creating a separate "Linux Dropper" target with CmdStager, widen the Unix/Linux command target's `Platform` to `['linux', 'unix']` and let the framework auto-select a fetch payload. Only add explicit dropper targets when fetch is not viable (e.g. no outbound HTTP).
 
 **Additional payload rules**:
 - Use `ARCH_CMD` payloads instead of command stagers when only `curl`/`wget` and other download mechanisms are available
@@ -433,14 +470,15 @@ Before submitting, verify:
 - [ ] `Author` — format is `'Name', # role comment` (not parens-in-string)
 - [ ] Module name is descriptive and searchable (vendor + product + vuln type)
 - [ ] Description lists vulnerable versions and fixed version (when known)
-- [ ] No hardcoded IPs, domains, or credentials; password defaults are `nil` not `''`
+- [ ] No hardcoded IPs, domains, or credentials; no API keys or hashes of credentials in code or docs; password defaults are `nil` not `''`
 - [ ] No `require` for bundled MSF/Rex libs; no `require 'msf/core'`
-- [ ] Does not re-register mixin-provided options (RHOSTS, RPORT, VHOST, SSL, TARGETURI)
+- [ ] Does not re-register mixin-provided options (RHOSTS, RPORT, VHOST, SSL); TARGETURI only re-registered when default differs from '/'
 - [ ] Does not override `target_uri` method
 - [ ] All `print_*` messages start with a capital letter
 - [ ] All `send_request_cgi` calls check for `nil` response (HTTP modules)
 - [ ] All response body access uses `.to_s` (e.g., `res.body.to_s.include?('...')`)
-- [ ] Payload-triggering requests use `timeout: 0` or `1`
+- [ ] Payload-triggering requests use `timeout: 0` or `1`; all other `send_request_cgi` calls use the default timeout
+- [ ] HTML form values (CSRF tokens, etc.) extracted with Nokogiri, not raw regex
 - [ ] JSON parsed via `res.get_json_document`, not `JSON.parse`
 - [ ] XML/SOAP modules XML-escape all user input injected into request bodies
 - [ ] All TCP `connect` calls handle `Rex::ConnectionError` (non-HTTP modules)
@@ -457,6 +495,11 @@ Before submitting, verify:
 - [ ] Calls `report_service` when the module's purpose is to enumerate/detect services (scanner/gather modules)
 - [ ] Uses `Faker` for fake usernames/accounts (not `rand_text_alphanumeric`)
 - [ ] Uses `Rex::Socket.to_authority` for host:port formatting (not string interpolation)
+- [ ] Multi-target modules use `target['Type']` for dispatch (not instance variable sentinels)
+- [ ] Async polling uses `retry_until_truthy` with configurable timeout (not manual `Rex.sleep` loops)
+- [ ] `DefangedMode` (if used) registered as an advanced option
+- [ ] No sensitive information (API keys, credential hashes) in code or documentation
+- [ ] One module per pull request
 - [ ] Module documentation `.md` file exists with Verification Steps and Scenarios
 - [ ] Tested `check` and `run` against a real instance via `~/.msf4/modules/` or `loadpath`
 

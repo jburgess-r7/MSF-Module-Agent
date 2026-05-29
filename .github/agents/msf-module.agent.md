@@ -55,12 +55,13 @@ For deeper reference on specific topics, load the appropriate file:
 - NEVER use `require` for standard MSF libraries — they are autoloaded
 - NEVER use `print` or `puts` — use `print_status`, `print_good`, `print_error`, `print_warning`, `vprint_status`
 - ALWAYS start `print_*` messages with a capital letter
-- NEVER hardcode paths, IPs, or credentials in module source
-- NEVER re-register options that mixins already provide (RHOSTS, RPORT, VHOST, SSL, TARGETURI)
+- NEVER hardcode paths, IPs, or credentials in module source; no API keys or hashes of credentials in code or docs
+- NEVER re-register options that mixins already provide (RHOSTS, RPORT, VHOST, SSL). TARGETURI may be re-registered only when the default path differs from '/'.
 - NEVER use `File.write` to save data — use `store_loot`
 - NEVER call `fail_with` or raise inside a `check` method — return CheckCode constants
 - ALWAYS use `Rex::Version` for version comparisons
 - ALWAYS use 2-space indentation, no tabs
+- No enforced line length limit — keep code readable; multiline block comments are acceptable for embedded payloads
 - ALWAYS set password option defaults to `nil`, not empty string
 - String delimiters: single quotes unless interpolation is needed
 - Method parameter names must be at least 2 characters (except well-known crypto abbreviations)
@@ -69,6 +70,9 @@ For deeper reference on specific topics, load the appropriate file:
 - When overriding `cleanup`, always call `super` to ensure the parent mixin chain cleans up connections and sessions
 - Don't set a default payload in modules — let the framework choose automatically
 - Prefer `prepend Msf::Exploit::Remote::AutoCheck` over manually calling `check` inside `exploit`
+- Use `retry_until_truthy` for async polling — never manual `Rex.sleep` + loop. Expose the timeout as an advanced option.
+- For multi-target modules, use `target['Type']` for dispatch — don't store sentinel symbols in instance variables
+- Register `DefangedMode` as an **advanced** option for destructive modules
 
 ### HTTP modules (auxiliary, exploit with HttpClient)
 
@@ -79,6 +83,8 @@ For deeper reference on specific topics, load the appropriate file:
 - ALWAYS handle `nil` responses from `send_request_cgi` (timeout/connection failure)
 - ALWAYS guard `res.body` with `.to_s` before string operations
 - ALWAYS use `res.get_json_document` — never manual `JSON.parse`
+- ALWAYS use `res.get_html_document` or `res.get_xml_document` with Nokogiri XPath/CSS for extracting HTML form values (CSRF tokens, etc.) — never raw regex on HTML
+- Do NOT hardcode `send_request_cgi` timeout — use framework default unless justified (e.g. payload trigger)
 
 ### Post and local exploit modules
 
