@@ -1,130 +1,172 @@
 # MSF Module Development Agent
 
-A VS Code Copilot agent and skill for writing production-quality [Metasploit Framework](https://github.com/rapid7/metasploit-framework) modules that pass `msftidy`, RuboCop, and Rapid7 code review on the first submission.
+A GitHub Copilot custom agent and reusable skill for creating, reviewing, fixing, and manually validating [Metasploit Framework](https://github.com/rapid7/metasploit-framework) modules against the policy and APIs in the current checkout.
+
+The package is designed to reduce avoidable review feedback, not guarantee maintainer acceptance. Metasploit conventions evolve, so applicable `AGENTS.md` files, current framework source and tests, official documentation, and recent Rapid7 review evidence take priority over a single older module.
 
 ## What It Does
 
-When invoked, the `@msf-module` agent:
+When selected, the **Metasploit Module Developer** agent:
 
-1. Reads your PoC script or vulnerability description from the workspace
-2. Classifies the correct module type (`auxiliary/gather/`, `exploit/multi/http/`, etc.)
-3. Writes a complete MSF module following Rapid7's exact conventions — metadata, mixins, error handling, credential reporting, loot storage
-4. Validates the output against the built-in checklist (Notes hash, DisclosureDate format, nil response checks, etc.)
-5. Generates companion documentation (Vulnerable Application, Verification Steps, Scenarios)
+1. Reads applicable `AGENTS.md` instructions and scopes the requested work.
+2. Classifies the module and checks for existing modules or open pull requests covering the same vulnerability.
+3. Verifies mixin contracts, inherited options, helpers, and reporting APIs against the current checkout.
+4. Traces detection, exploitation or gathering, failure paths, reporting, cleanup, repeatability, and documentation.
+5. Creates the smallest coherent implementation or review fix while preserving unrelated work.
+6. Runs source-checkout validation such as Ruby syntax, RuboCop, `msftidy`, documentation tidy, focused specs, and `git diff --check`.
+7. Builds a manual QA matrix covering targets, payload selection, AutoCheck behavior, partial failure, cleanup, and immediate reruns.
 
-The skill encodes real MSF framework internals — method signatures, option types, RuboCop cops, msftidy checks — sourced directly from the framework source and real Rapid7 maintainer PR review feedback, not documentation.
+It can work from a PoC or vulnerability description, review an existing module, respond to pull-request feedback, and reassess a module after a rebase or framework behavior change.
+
+The agent does not fabricate documentation Scenarios, test output, sessions, or root-cause claims. A human must run the relevant lab scenarios and record real results. It also does not commit, push, or alter a pull request unless explicitly authorized.
 
 ## What's Included
 
+```text
+.
+├── README.md
+└── .github/
+    ├── agents/
+    │   └── msf-module.agent.md
+    └── skills/
+        └── msf-module-dev/
+            ├── SKILL.md
+            └── references/
+                ├── review-qa.md
+                ├── module-template.md
+                ├── metadata.md
+                ├── http-client.md
+                ├── reporting.md
+                ├── non-http-modules.md
+                └── documentation-template.md
 ```
-.github/
-├── agents/
-│   └── msf-module.agent.md          # Agent definition (persona, workflow, constraints)
-├── skills/
-│   └── msf-module-dev/
-│       ├── SKILL.md                  # Core knowledge base (rules, patterns, checklist)
-│       └── references/
-│           ├── module-template.md    # Annotated auxiliary + exploit templates
-│           ├── metadata.md           # Notes, References, Rankings, Options
-│           ├── reporting.md          # store_loot, credentials, Rex::Text::Table
-│           ├── http-client.md        # HttpClient mixin API reference
-│           ├── non-http-modules.md   # Scanner, TCP, FTP, SMB, Local, Post patterns
-│           └── documentation-template.md  # Module documentation template
-└── README.md                         # This file
-```
+
+- [`msf-module.agent.md`](.github/agents/msf-module.agent.md) defines the agent's authority order, workflow, tools, safety boundary, and review priorities.
+- [`SKILL.md`](.github/skills/msf-module-dev/SKILL.md) contains the core workflow and routes the agent to relevant references.
+- [`review-qa.md`](.github/skills/msf-module-dev/references/review-qa.md) covers evidence freshness, recurring review feedback, static review, manual testing, and regression discipline.
+- [`module-template.md`](.github/skills/msf-module-dev/references/module-template.md) provides annotated remote exploit and auxiliary gather patterns.
+- [`metadata.md`](.github/skills/msf-module-dev/references/metadata.md) covers metadata, Notes, options, targets, actions, and `DefaultOptions`.
+- [`http-client.md`](.github/skills/msf-module-dev/references/http-client.md) covers requests, URI handling, timeouts, parsing, cookies, redirects, and HTTP QA.
+- [`reporting.md`](.github/skills/msf-module-dev/references/reporting.md) covers application services, vulnerabilities, credentials, logins, loot, and tables.
+- [`non-http-modules.md`](.github/skills/msf-module-dev/references/non-http-modules.md) covers scanners, raw TCP, LoginScanner, protocol mixins, local/post modules, file operations, and generated fetch commands.
+- [`documentation-template.md`](.github/skills/msf-module-dev/references/documentation-template.md) covers module documentation and human-recorded Scenarios.
 
 ## Installation
 
-Copy the `agents/` and `skills/` folders into your workspace's `.github/` directory:
+Copy only the agent and skill directories into the Metasploit checkout you want the agent to inspect:
 
-```
-your-workspace/
-├── .github/
-│   ├── agents/
-│   │   └── msf-module.agent.md
-│   └── skills/
-│       └── msf-module-dev/
-│           ├── SKILL.md
-│           └── references/
-│               └── ...
-├── your-poc.py
-├── advisory.md
-└── ...
+```text
+metasploit-framework/
+└── .github/
+    ├── agents/
+    │   └── msf-module.agent.md
+    └── skills/
+        └── msf-module-dev/
+            ├── SKILL.md
+            └── references/
+                └── ...
 ```
 
-The agent will appear in VS Code's Copilot Chat agent picker as `@msf-module`.
+Merge them with the checkout's existing `.github/` directory. Do not replace or copy the entire source repository's `.github/` tree, which also contains unrelated workflows, issue templates, and repository configuration.
+
+Select **Metasploit Module Developer** from the agent picker in a GitHub Copilot environment that supports repository custom agents and skills.
 
 ### Requirements
 
-- VS Code with GitHub Copilot Chat extension
-- Metasploit Framework installed locally (for validation via `msftidy` / `rubocop`). The skill references the default install path at `/opt/metasploit-framework/embedded/framework/` — adjust the agent file if yours differs.
+- A GitHub Copilot environment with repository custom-agent and skill support.
+- A Metasploit Framework source checkout containing the module under development.
+- The checkout's Ruby dependencies when running RuboCop, specs, or bundled validators.
+- An authorized test environment for manual vulnerability and cleanup testing.
+
+The agent does not assume Metasploit is installed under `/opt`. It validates the active source checkout and warns about stale copies such as `~/.msf4/modules` when they could shadow the reviewed code.
 
 ## Usage
 
-### Basic: Convert a PoC to an MSF module
+Select the **Metasploit Module Developer** agent, then describe the task and point it to the relevant local artifacts.
 
-Add your PoC script and any supporting files (advisory writeup, vulnerability details) to the workspace, then:
+### Create a Module From a PoC
 
-```
-@msf-module Convert my PoC (exploit.py) into a Metasploit auxiliary gather module.
-Target is Acme WebApp < 4.2.1, authenticated stored XSS that steals session tokens.
-CVE-2024-12345.
-```
-
-### Specific: Write a module from a vulnerability description
-
-```
-@msf-module Write an auxiliary/gather module for CVE-2024-XXXXX.
-The vuln is a path traversal in /api/v1/files?path=../../etc/passwd on Vendor Product < 3.0.
-No auth required. HTTPS on port 8443 by default.
+```text
+Convert exploit.py into a Metasploit module for CVE-2026-12345.
+The vulnerable product is Acme App 4.0.0 through 4.2.1; 4.2.2 is fixed.
+Review advisory.md and include the companion module documentation.
 ```
 
-### Review: Check an existing module
+### Review or Fix an Existing Module
 
-```
-@msf-module Review my module (modules/auxiliary/gather/webapp_dump.rb) for msftidy
-and rubocop compliance. Fix any issues.
-```
-
-### Tips for better results
-
-- **Include the PoC in the workspace** — the agent reads it to understand the attack flow, HTTP methods, data formats, and auth requirements
-- **Specify the CVE** — it gets wired into References metadata automatically
-- **Mention affected versions** — goes into the Description and documentation
-- **State the module type if you know it** — otherwise the agent classifies it from the classification table
-- **Include advisory/writeup files** — the more context, the better the Description and documentation
-
-## Customization
-
-### Different MSF install path
-
-Edit the constraint in [agents/msf-module.agent.md](agents/msf-module.agent.md):
-
-```diff
-- the framework source at `/opt/metasploit-framework/embedded/framework/`
-+ the framework source at `/usr/share/metasploit-framework/`
+```text
+Review modules/exploits/multi/http/acme_app_rce.rb and its documentation.
+Follow every applicable AGENTS.md, verify current mixin APIs, fix concrete issues,
+and run the relevant validators. Do not commit or push anything.
 ```
 
-### Adding new reference material
+### Respond to Pull-Request Feedback
 
-Add `.md` files to `skills/msf-module-dev/references/` and link them from the Reference Files table at the bottom of [skills/msf-module-dev/SKILL.md](skills/msf-module-dev/SKILL.md).
+```text
+Investigate the reviewer feedback in review-notes.md against the current branch.
+Reproduce behavioral claims before changing code, keep the fix focused, and give
+me a manual regression matrix and a draft PR response. Do not commit or push.
+```
 
-### Extending the agent
+### Reassess After a Rebase or Payload Change
 
-The agent file supports standard VS Code custom agent properties — you can add or remove tools, adjust the description keywords for better invocation matching, or modify the workflow steps.
+```text
+Re-review this module after the framework rebase. Test automatic payload selection,
+every target, AutoCheck true/false, ForceExploit where relevant, cleanup after partial
+failure, and an immediate rerun. Separate observations from proven causes.
+```
+
+Include the PoC, advisory, protocol notes, reviewer comments, affected/fixed versions, expected platforms and architectures, and available lab topology when known.
+
+## Validation Workflow
+
+From the Metasploit repository root, the agent uses the checkout's own tooling:
+
+```bash
+ruby -c modules/<type>/<path>/<module>.rb
+bundle exec rubocop modules/<type>/<path>/<module>.rb
+ruby tools/dev/msftidy.rb modules/<type>/<path>/<module>.rb
+ruby tools/dev/msftidy_docs.rb documentation/modules/<doc-type>/<path>/<module>.md
+git diff --check
+```
+
+Library changes should also receive focused RSpec coverage. Manual validation should exercise, where applicable:
+
+- unrelated and patched targets;
+- `check`, `AutoCheck true`, `AutoCheck false`, and `ForceExploit`;
+- every target and action;
+- automatic selection and representative explicit payloads;
+- partial failure after each mutation, successful cleanup, and an immediate rerun;
+- operation with the database disconnected;
+- harmless interaction with an opened session rather than relying only on "session opened";
+- documentation output refreshed from actual tested behavior.
+
+An isolated console configuration helps prevent stale user modules and settings from affecting results:
+
+```bash
+MSF_CFGROOT_CONFIG="$(mktemp -d /tmp/msf-module-test.XXXXXX)" ./msfconsole -q
+```
 
 ## Coverage
 
-The skill covers the most common MSF module patterns:
+- Remote and local exploits, auxiliary gather/admin/scanner modules, and post modules.
+- Reasoned `CheckCode` results and correct AutoCheck/ForceExploit behavior.
+- HTTP requests, structured parsing, multipart data, cookies, redirects, timeouts, and asynchronous polling.
+- Raw TCP and LoginScanner contracts plus reporting ownership for FTP, SMB, SSH, LDAP, and DCERPC mixins.
+- Payload/target compatibility, framework payload selection, fetch payloads, and generated commands.
+- Exact application-service reporting for vulnerabilities, credentials, logins, and loot.
+- Filesystem and application-state cleanup, partial failures, repeatability, and rerun testing.
+- Metadata, options, targets, architecture/platform declarations, Notes, and side effects.
+- Module documentation, validation tools, pull-request review, and regression QA.
 
-- **Module types**: Auxiliary (gather, admin, scanner), Exploit (remote HTTP, local privesc), Post
-- **HTTP mixins**: `HttpClient` — GET/POST/PUT, JSON, SOAP/XML, multipart file upload, cookies, redirects, basic auth
-- **Non-HTTP mixins**: TCP, UDP, FTP, SMB, SSH, SMTP, MySQL, PostgreSQL, MSSQL, SNMP, LDAP, Telnet, WinRM
-- **Scanner modules**: `Msf::Auxiliary::Scanner` with `run_host(ip)` and batch patterns
-- **Local exploits**: `Msf::Exploit::Local`, `AutoCheck` (prepend), `FileDropper`, `SessionTypes`
-- **Post modules**: `Msf::Post`, session interaction, `Msf::Post::File`, platform/OS-specific mixins
-- **Check method**: All `CheckCode` constants with reason strings
-- **Reporting**: `store_loot`, `create_credential`/`create_credential_login`, `report_service`, `Rex::Text::Table`
-- **Metadata**: All Notes constants, Reference types, Rankings, Option types, DefaultOptions
-- **Validation**: msftidy checks, RuboCop cops, manual checklist
-- **Documentation**: Module doc template with Vulnerable Application, Verification Steps, Options, Scenarios
+The current checkout remains the source of truth. Existing modules and past review comments are evidence to verify, not permanent policy.
+
+## Customization and Maintenance
+
+Edit [`.github/agents/msf-module.agent.md`](.github/agents/msf-module.agent.md) to adjust the description, tools, workflow, or safety constraints.
+
+Add focused material under [`.github/skills/msf-module-dev/references/`](.github/skills/msf-module-dev/references/) and link it from the References table in [`.github/skills/msf-module-dev/SKILL.md`](.github/skills/msf-module-dev/SKILL.md). Keep the core skill concise and route detailed or variant-specific guidance to references.
+
+Before a substantial refresh, compare the package against applicable `AGENTS.md` history, current framework mixins/APIs/custom cops/specs, official developer documentation, recent Rapid7 feedback in the same module area, and the current custom-agent and skill formats supported by the intended Copilot environment.
+
+After editing the package, validate the skill metadata, relative links, Markdown fences, Ruby examples, and full module examples before publishing the update.
