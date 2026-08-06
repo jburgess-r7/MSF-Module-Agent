@@ -1,350 +1,204 @@
-# Reporting & Loot Reference
+# Reporting services, vulnerabilities, credentials, and loot
 
-## Mandatory Reporting Rule
+Include `Msf::Auxiliary::Report` unless an inherited mixin already provides the reporting API.
 
-**Every module that extracts data or discovers credentials MUST report its findings** using `store_loot` and/or `create_credential_login`. Modules that only `print_good` their findings without reporting to the database will be rejected in review.
+Reporting should describe the object actually discovered and preserve its relationships. A host and port alone are not enough when an application, HTTP/TLS layer, and TCP transport all share the same endpoint.
 
-- **NEVER use `File.write` or `File.open`** to save data — always use `store_loot`, which saves data to the proper loot directory and records it in the MSF database.
-- `auxiliary/gather/` modules must call `store_loot` for extracted data.
-- Modules that discover credentials must call `create_credential_login` (or the helper pattern below).
-- `auxiliary/scanner/` modules that discover services must call `report_service`.
+## Report the application service early
 
----
-
-## store_loot
-
-Saves exfiltrated data to disk and records it in the database.
+Report the application as soon as it is positively identified. Do not wait until credentials are found or exploitation finishes. Keep the helper safe to call from both `check` and `exploit`, because `AutoCheck false` bypasses `check`.
 
 ```ruby
-path = store_loot(ltype, ctype, host, data, filename, info, service)
-```
+def report_acme_service(version: nil)
+  common = { host: rhost, port: rport, proto: 'tcp' }
+  tcp_service = common.merge(name: 'tcp', parents: nil)
 
-| Parameter  | Type         | Required | Description                                                       |
-| ---------- | ------------ | -------- | ----------------------------------------------------------------- |
-| `ltype`    | String       | Yes      | OID-style loot type, e.g. `'webapp.emails'`, `'cisco.ios.config'` |
-| `ctype`    | String       | Yes      | MIME content type. `text/*` → `.txt`, else `.bin`                 |
-| `host`     | String       | Yes      | Target IP address or session object                               |
-| `data`     | String       | Yes      | The file contents to save                                         |
-| `filename` | String       | No       | Original filename (metadata only)                                 |
-| `info`     | String       | No       | Descriptive text about the loot                                   |
-| `service`  | Mdm::Service | No       | Service object to associate with                                  |
+  web_service = if ssl
+                  common.merge(
+                    name: 'https',
+                    parents: common.merge(name: 'ssl', parents: tcp_service)
+                  )
+                else
+                  common.merge(name: 'http', parents: tcp_service)
+                end
 
-**Returns:** Full local file path where loot was saved.
-
-### Usage pattern
-
-```ruby
-path = store_loot(
-  'webapp.user.creds',
-  'text/csv',
-  rhost,
-  cred_table.to_csv,
-  'user_credentials.csv',
-  'Extracted user credentials'
-)
-print_status("Credentials saved in: #{path}")
-```
-
-For plain text:
-
-```ruby
-store_loot('app.config', 'text/plain', rhost, config_data, 'app.conf', 'Application config')
-```
-
-For binary/JSON:
-
-```ruby
-store_loot('app.database', 'application/octet-stream', rhost, db_dump, 'dump.db')
-store_loot('app.api.data', 'application/json', rhost, json_data, 'data.json')
-```
-
----
-
-## Credential Reporting
-
-Include `Msf::Auxiliary::Report` (already included by default in auxiliary modules).
-
-### Recommended helper pattern
-
-Define a private helper method to keep `run` clean:
-
-```ruby
-def report_cred(opts)
-  service_data = {
-    address: opts[:ip],
-    port: opts[:port],
-    service_name: opts[:service_name],
-    protocol: 'tcp',
-    workspace_id: myworkspace_id
-  }
-
-  credential_data = {
-    origin_type: :service,
-    module_fullname: fullname,
-    username: opts[:user],
-    private_data: opts[:password],
-    private_type: :password
-  }.merge(service_data)
-
-  login_data = {
-    core: create_credential(credential_data),
-    status: Metasploit::Model::Login::Status::UNTRIED,
-    proof: opts[:proof]
-  }.merge(service_data)
-```
-
-**Important**: When `status` is `SUCCESSFUL` (i.e., the module verified the credential), you **must** also include `last_attempted_at: DateTime.now`. Without it, `create_credential_login` raises `ActiveRecord::RecordInvalid` ("Last attempted at can't be nil if status is tried"):
-
-```ruby
-  login_data = {
-    core: create_credential(credential_data),
-    status: Metasploit::Model::Login::Status::SUCCESSFUL,
-    last_attempted_at: DateTime.now,
-    proof: opts[:proof]
-  }.merge(service_data)
-```
-
-  create_credential_login(login_data)
+  report_service(
+    common.merge(
+      name: 'acme-app',
+      info: version ? "Acme App #{version}" : 'Acme App',
+      resource: { uri: normalize_uri(target_uri.path) },
+      parents: web_service
+    )
+  )
 end
 ```
 
-Call from `run`:
+The resulting hierarchy is:
+
+```text
+acme-app(resource: base URI) -> http -> tcp
+acme-app(resource: base URI) -> https -> ssl -> tcp
+```
+
+Rules:
+
+- `name` is the application/service identity; `info` is a banner or version description.
+- Use `resource` to distinguish applications or resources sharing an endpoint, such as a base URI, LDAP DN, SMB share, or named pipe.
+- `parents` accepts a service hash or array of service hashes. Give the terminal transport `parents: nil` when constructing a full chain.
+- The database makes `report_service` idempotent for the same identifying attributes. Memoization is useful, but code must still work when no database is active and the helper returns `nil`.
+- Protocol mixins may already own transport reporting. Inspect the current mixin before duplicating its service or host record.
+- A separate `report_host` call is normally redundant: service, vulnerability, and credential APIs report the host as needed.
+- If reachability is known before any service/product can be identified, a host-only report can be appropriate; do not repeat it once a later reporting API owns the same host evidence.
+
+## Associate a confirmed check result
+
+For an interactive `check` command, attach the exact service to the CheckCode vulnerability metadata:
 
 ```ruby
-report_cred(
-  ip: rhost,
-  port: rport,
-  service_name: (ssl ? 'https' : 'http'),
-  user: username,
-  password: password,
-  proof: response_body
+service = @acme_service ||= report_acme_service(version: version)
+
+Exploit::CheckCode::Vulnerable(
+  'Confirmed command injection with a harmless marker',
+  vuln: { service: service }
 )
 ```
 
-### create_credential keys
-
-| Key               | Type    | Description                                                             |
-| ----------------- | ------- | ----------------------------------------------------------------------- |
-| `origin_type`     | Symbol  | `:service`, `:import`, `:manual`, `:session`                            |
-| `module_fullname` | String  | Use `fullname` (auto-populated)                                         |
-| `username`        | String  | The username                                                            |
-| `private_data`    | String  | The credential value                                                    |
-| `private_type`    | Symbol  | `:password`, `:ssh_key`, `:ntlm_hash`, `:nonreplayable_hash`, `:pkcs12` |
-| `address`         | String  | Target IP                                                               |
-| `port`            | Integer | Target port                                                             |
-| `service_name`    | String  | Service name (`'http'`, `'ssh'`, etc.)                                  |
-| `protocol`        | String  | `'tcp'` or `'udp'`                                                      |
-| `workspace_id`    | Integer | Use `myworkspace_id`                                                    |
-| `realm_key`       | String  | Optional domain/realm type                                              |
-| `realm_value`     | String  | Optional domain/realm name                                              |
-| `jtr_format`      | String  | Optional John the Ripper format hint                                    |
-
-### create_credential_login keys
-
-| Key                                                           | Type             | Description                                                                |
-| ------------------------------------------------------------- | ---------------- | -------------------------------------------------------------------------- |
-| `core`                                                        | Credential::Core | Return value from `create_credential`                                      |
-| `status`                                                      | String           | `Metasploit::Model::Login::Status::UNTRIED`, `::SUCCESSFUL`, `::INCORRECT` |
-| `access_level`                                                | String           | Optional (`'admin'`, `'user'`, etc.)                                       |
-| `proof`                                                       | String           | Optional proof string (response body, cookie, etc.)                        |
-| `address`, `port`, `service_name`, `protocol`, `workspace_id` | Various          | Same as above                                                              |
-
-### create_credential_and_login (convenience combo)
-
-Combines both calls — accepts all keys from both methods:
+The console check dispatcher uses `vuln:` when reporting the result. AutoCheck separately calls the module's `report_vuln`. If AutoCheck must always associate the same application service, use a narrowly scoped override:
 
 ```ruby
-create_credential_and_login(
-  origin_type: :service,
-  module_fullname: fullname,
-  username: user,
-  private_data: pass,
-  private_type: :password,
-  address: rhost,
-  port: rport,
-  service_name: 'http',
-  protocol: 'tcp',
-  workspace_id: myworkspace_id,
-  status: Metasploit::Model::Login::Status::UNTRIED
-)
-```
-
----
-
-## report_service
-
-Record a discovered service in the database:
-
-```ruby
-report_service(
-  host: rhost,
-  port: rport,
-  proto: 'tcp',
-  name: 'http',
-  info: 'Acme WebApp 4.2.1'
-)
-```
-
-| Key      | Type    | Description                                  |
-| -------- | ------- | -------------------------------------------- |
-| `:host`  | String  | **Required.** IP address                     |
-| `:port`  | Integer | **Required.** Port number                    |
-| `:proto` | String  | `'tcp'` (default) or `'udp'`                 |
-| `:name`  | String  | Service name (auto-downcased)                |
-| `:info`  | String  | Version/banner info                          |
-| `:state` | String  | `'open'` (default), `'closed'`, `'filtered'` |
-
----
-
-## store_valid_credential (Msf::Module::Auth)
-
-A simpler alternative to the full `create_credential_and_login` pattern. Uses keyword arguments. **Defined in `Msf::Module::Auth`** (auto-included in all modules). Stores credentials and associates them with a service in the database.
-
-```ruby
-store_valid_credential(
-  user: 'admin',
-  private: 'secret',
-  private_type: :password,         # default; :ssh_key, :ntlm_hash also valid
-  service_data: {
-    address: rhost,
-    port: rport,
-    service_name: 'ssh',           # match the actual service, not the exploit transport
-    protocol: 'tcp',
-    workspace_id: myworkspace_id
-  }
-)
-```
-
-- If `service_data` is omitted and the module includes `HttpClient`, defaults to `service_details` (the HTTP service on `rhost:rport`). **Always pass explicit `service_data`** when the credential belongs to a different port/protocol (e.g., SSH on port 22 when the exploit went through HTTP on port 443).
-- Reviewers will flag exploit modules that discover or set credentials without saving them.
-- **When the module sets a known credential** (e.g., password change during exploitation), store the final persistent credential, not the intermediate one. If rotation fails, at minimum log a warning so the operator knows what credential is active.
-- See `lib/msf/core/module/auth.rb` for the full implementation.
-
----
-
-## Msf::Exploit::Retry — retry_until_truthy
-
-For polling operations that require waiting on asynchronous target-side state, use `retry_until_truthy` instead of manual `N.times` + `Rex.sleep` loops. This mixin is in `lib/msf/core/exploit/retry.rb`.
-
-```ruby
-include Msf::Exploit::Retry
-
-# Register an advanced option:
-register_advanced_options([
-  OptInt.new('OPERATION_TIMEOUT', [true, 'Seconds to wait for the operation to complete', 30]),
-])
-
-# Use in the module:
-result = retry_until_truthy(timeout: datastore['OPERATION_TIMEOUT']) do
-  res = send_request_cgi(...)
-  res&.code == 200 && res.body.to_s.include?('expected_marker')
+def report_vuln(opts = {})
+  service = opts[:service] || @acme_service || report_acme_service
+  super(opts.merge(service: service))
 end
-fail_with(Failure::Unknown, 'Operation did not complete within timeout') unless result
 ```
 
-- Expose the timeout as an **advanced option** (not a regular option) so it doesn't clutter `show options` but remains tunable.
-- The block must return a **truthy value** to stop retrying, or `false`/`nil` to keep trying.
-- Uses exponential backoff internally — no manual `sleep` needed.
-- Reference: `modules/exploits/linux/misc/cisco_ios_xe_rce.rb`
+Only use this override when the service helper is safe before full identification; otherwise report after identification and pass `service:` explicitly. Do not rely on `port`/`proto` fallback: the database may select the first same-port service, commonly the TCP parent.
 
----
+Current limitation: only `Exploit::CheckCode::Vulnerable` accepts `vuln:` metadata. A manual `Appears` check is reported by the console dispatcher using generic host/port data and does not call the module's override, so exact application-service linkage is not currently expressible there. Do not pass an unsupported `vuln:` keyword to `Appears`; ensure AutoCheck and explicit exploit-time reporting are exact and document this manual-check limitation when it matters.
 
-## report_vuln
+## Report a vulnerability explicitly
 
-Records a confirmed vulnerability in the MSF database. Call this when `check` (or `run`) has positively confirmed the vulnerability, so workspace operators know which hosts are affected.
+Call `report_vuln` only after the module has evidence for the vulnerability, not merely ordinary successful authentication or a generic product banner.
 
 ```ruby
 report_vuln(
   host: rhost,
   port: rport,
   proto: 'tcp',
-  name: 'Vendor Product Unauthenticated RCE',
-  info: 'Confirmed via out-of-band callback',
-  refs: references
+  service: @acme_service,
+  name: name,
+  refs: references,
+  info: 'Unauthenticated command injection was confirmed with a harmless marker'
 )
 ```
 
-| Key      | Type    | Description                                                              |
-| -------- | ------- | ------------------------------------------------------------------------ |
-| `:host`  | String  | **Required.** Target IP address                                          |
-| `:port`  | Integer | Port number                                                              |
-| `:proto` | String  | `'tcp'` or `'udp'`                                                       |
-| `:name`  | String  | Vulnerability name (human-readable)                                      |
-| `:info`  | String  | Additional detail on how it was confirmed                                |
-| `:refs`  | Array   | Pass `references` (auto-populated from module's `References` metadata)   |
+Use `refs: references` to preserve module references. Put vulnerability-specific evidence in the vulnerability `info`; do not overload the service banner with it.
 
-**When to call it**: whenever your module confirms the vulnerability is present, not just that the service is running. Usually call it from `run`, `run_host`, or `exploit` once confirmation is complete. Calling it from `check` is acceptable when the module intentionally records confirmation there. Reviewers will flag gather/scanner modules that confirm vulnerabilities but don't call `report_vuln`.
+Avoid duplicate reporting. AutoCheck already reports `Appears` and `Vulnerable` results through `report_vuln`. An explicit later report is appropriate when it adds exploit-time confirmation or a different resource, but should identify the same service and avoid creating semantically duplicate records.
 
----
+## Credential and login reporting
 
-## Rex::Text::Table
-
-For formatted console output and CSV export of results.
-
-### Construction
+Use `create_credential` for a credential whose validity is unknown. Add a login only when it is meaningful to associate the credential with a service and status. `create_credential_and_login` is convenient when both are known.
 
 ```ruby
-tbl = Rex::Text::Table.new(
-  'Header'  => 'Discovered Credentials',
-  'Indent'  => 1,
-  'Columns' => ['Username', 'Password', 'Admin', 'Email']
-)
-```
+def report_admin(username, password)
+  service = @acme_service || report_acme_service
 
-### Full options
-
-| Key           | Type    | Default | Description                      |
-| ------------- | ------- | ------- | -------------------------------- |
-| `'Header'`    | String  | nil     | Table heading                    |
-| `'Columns'`   | Array   | `[]`    | Column names                     |
-| `'Rows'`      | Array   | `[]`    | Initial rows                     |
-| `'Indent'`    | Integer | 0       | Left indent spaces               |
-| `'CellPad'`   | Integer | 2       | Padding between columns          |
-| `'Width'`     | Integer | 80      | Max table width                  |
-| `'SortIndex'` | Integer | 0       | Column to sort by (-1 = no sort) |
-| `'Prefix'`    | String  | `''`    | Text prepended before table      |
-| `'Postfix'`   | String  | `''`    | Text appended after table        |
-
-### Methods
-
-| Method                 | Description                   |
-| ---------------------- | ----------------------------- |
-| `<< [val1, val2, ...]` | Add a row                     |
-| `to_s`                 | Render formatted table string |
-| `to_csv`               | Render as CSV                 |
-| `print`                | Print to stdout               |
-
-### Complete pattern (table + loot + creds)
-
-```ruby
-tbl = Rex::Text::Table.new(
-  'Header'  => 'Found Credentials',
-  'Indent'  => 1,
-  'Columns' => ['Username', 'Password', 'Role']
-)
-
-credentials.each do |cred|
-  tbl << [cred[:user], cred[:pass], cred[:role]]
-  report_cred(
-    ip: rhost,
+  data = {
+    workspace_id: myworkspace_id,
+    origin_type: :service,
+    module_fullname: fullname,
+    username: username,
+    private_type: :password,
+    private_data: password,
+    address: rhost,
     port: rport,
-    service_name: (ssl ? 'https' : 'http'),
-    user: cred[:user],
-    password: cred[:pass],
-    proof: cred[:proof]
-  )
+    protocol: 'tcp',
+    service_name: service&.name || 'acme-app',
+    access_level: 'administrator',
+    status: Metasploit::Model::Login::Status::SUCCESSFUL,
+    last_attempted_at: Time.now
+  }
+  data[:service_id] = service.id if service
+
+  create_credential_and_login(data)
 end
+```
 
-print_line
-print_line(tbl.to_s)
+Important fields:
 
-path = store_loot(
-  'app.user.creds',
+| Field | Guidance |
+| --- | --- |
+| `origin_type` | Usually `:service` for remote modules; post modules commonly use `:session` with session provenance |
+| `private_type` | `:password`, `:nonreplayable_hash`, `:ssh_key`, or the correct supported type |
+| `service_name` | Match the application service, not a generic same-port TCP record |
+| `service_id` | Use the exact reported service ID when available |
+| `access_level` | Set when known, such as `administrator` or `user` |
+| `status` | `SUCCESSFUL` only when authentication or account usability was demonstrated; otherwise use the appropriate status/UNTRIED flow |
+| `last_attempted_at` | Set for a demonstrated login attempt, especially `SUCCESSFUL` |
+
+Do not report the same credential, access level, or banner again as a note. Do not report a normal successful login as a vulnerability unless the login itself demonstrates a vulnerability, such as default credentials that are explicitly the module's finding.
+
+Login scanners have a stronger contract: connection errors and timeouts are `UNABLE_TO_CONNECT`, not incorrect credentials. Inspect the current LoginScanner result APIs and shared specs before implementing a scanner.
+
+## Store loot
+
+Use `store_loot` for retrieved data instead of writing directly into an arbitrary local path:
+
+```ruby
+loot_path = store_loot(
+  'acme.config',
+  'application/json',
+  rhost,
+  config_json,
+  'acme-config.json',
+  'Acme App configuration export',
+  @acme_service
+)
+print_good("Configuration saved to #{loot_path}")
+```
+
+Signature:
+
+```ruby
+store_loot(type, content_type, host, data, filename = nil, info = nil, service = nil)
+```
+
+- Pass the application service as the final argument when available.
+- For post modules, pass the session (or the host form required by the current mixin) rather than assuming `rhost` exists.
+- `store_loot` remains useful without a database and returns the saved path.
+- `File.write` is acceptable only for a temporary local artifact needed by exploitation, not for user-facing loot. Place temporary data in a private temporary directory and remove it in `cleanup`/`ensure`.
+- Never store secrets in console output when a credential/loot record is the safer representation, unless the module's established UX requires showing newly created credentials.
+
+## Tables
+
+Use `Rex::Text::Table` when multiple records need readable console output and optionally convert the same table to CSV for loot:
+
+```ruby
+table = Rex::Text::Table.new(
+  'Header' => 'Acme Accounts',
+  'Indent' => 1,
+  'Columns' => %w[Username Role]
+)
+
+accounts.each { |account| table << [account[:username], account[:role]] }
+print_line(table.to_s)
+
+store_loot(
+  'acme.accounts',
   'text/csv',
   rhost,
-  tbl.to_csv,
-  'credentials.csv',
-  'Extracted credentials'
+  table.to_csv,
+  'acme-accounts.csv',
+  'Acme App accounts',
+  @acme_service
 )
-print_status("Credentials saved in: #{path}")
 ```
+
+## Reporting QA
+
+- Report the application during identification and ensure the exploit path reports it when AutoCheck is disabled.
+- Query or inspect database output to verify application, HTTP/TLS, and TCP records form the expected hierarchy.
+- Verify vulnerability, credential login, and loot point to the application service, not the transport.
+- Run without a database and confirm reporting helpers do not become control-flow dependencies.
+- Avoid duplicate service, credential, note, and vulnerability records on immediate reruns.

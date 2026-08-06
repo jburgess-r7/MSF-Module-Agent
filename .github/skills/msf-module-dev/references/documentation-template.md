@@ -1,118 +1,145 @@
-# Module Documentation Template
+# Module documentation
 
-Every module submission to metasploit-framework should include a companion documentation file. Documentation lives alongside the module at `documentation/modules/<type>/<path>/<module_name>.md`.
+Start from `documentation/modules/module_doc_template.md` in the current checkout. Documentation is an operational test record, not a paraphrase of metadata.
 
-For example, module `modules/auxiliary/gather/webapp_data_dump.rb` gets documentation at `documentation/modules/auxiliary/gather/webapp_data_dump.md`.
+## File path
 
----
+Mirror the module path, using the documentation tree's naming:
 
-## Template
+```text
+modules/exploits/multi/http/acme_rce.rb
+documentation/modules/exploit/multi/http/acme_rce.md
 
-The documentation file should contain these sections in order. Copy this structure when creating a new module doc file.
-
-### Section 1: Vulnerable Application
-
-```markdown
-## Vulnerable Application
-
-This module exploits an authentication bypass in Acme WebApp versions prior to 4.2.1.
-An unauthenticated attacker can compute valid admin credentials via a weak key derivation
-in the /api/login endpoint. The vulnerability was confirmed on version 4.2.0.
-
-A dockerized test environment can be set up using the official Docker image:
-https://hub.docker.com/r/acme/webapp
+modules/auxiliary/scanner/http/acme_version.rb
+documentation/modules/auxiliary/scanner/http/acme_version.md
 ```
 
-This section must describe the vulnerability being exploited: what it is, what an attacker can do with it, and what access is required. Follow with the affected product/versions and setup instructions. Include links to downloads, advisories, specific versions tested, and Docker/Vagrant setup if available. Write so someone can reproduce the environment 5+ years later.
+Notice that exploit documentation uses singular `exploit`, while the source directory is `exploits`.
 
-Do NOT write a generic "this module targets X" without describing the actual vulnerability. Real examples from MSF:
-- "This module exploits an improper access control vulnerability (CVE-2023-6329) in Control iD iDSecure <= v4.7.43.0. It allows an unauthenticated remote attacker to compute valid credentials and to add a new administrative user."
-- "Attackers with knowledge of a valid username can provide a crafted S3 authentication header to the CrushFTP web API to authenticate as that user without valid credentials."
+## Required content
 
-### Section 2: Verification Steps
+### Vulnerable Application
+
+Include enough information to recreate the target years later:
+
+- product and component;
+- precise vulnerable versions and fixed version when known;
+- required authentication, privileges, plugins, features, and configuration;
+- target OS/architecture/runtime constraints;
+- authoritative download/advisory links;
+- complete setup and teardown steps.
+
+When a reproducible Docker/Compose lab is used, keep the runnable definition in the module document when current project automation/review expects it. Pin vulnerable image/package versions. Do not rely only on an external repository that may disappear or change.
+
+Example shape:
+
+````markdown
+## Vulnerable Application
+
+Acme App versions 4.0.0 through 4.2.1 are vulnerable. Version 4.2.2
+fixes the issue. The vulnerable endpoint is enabled by default and does not
+require authentication.
+
+Save the following as `compose.yml`:
+
+```yaml
+services:
+  acme:
+    image: example/acme:4.2.1
+    ports:
+      - "8080:8080"
+```
+
+Start the target with `docker compose up --detach`.
+````
+
+Use valid nested Markdown fencing in the real document.
+
+### Verification Steps
+
+Write exact operator steps with the final module path and required options:
 
 ```markdown
 ## Verification Steps
 
-1. Install the application
-1. Start msfconsole
-1. Do: `use auxiliary/gather/webapp_data_dump`
-1. Do: `set RHOSTS <target>`
-1. Do: `set USERNAME admin@example.com`
-1. Do: `set PASSWORD password123`
-1. Do: `run`
-1. You should see extracted data stored as loot.
+1. Start a vulnerable Acme App instance as described above.
+2. Start Metasploit Framework from the source checkout.
+3. Run: `use exploit/multi/http/acme_rce`
+4. Run: `set RHOSTS <target-host>`
+5. Run: `set RPORT 8080`
+6. Run: `check`
+7. Run: `run`
+8. Verify that the selected payload succeeds and created artifacts are removed.
 ```
 
-Numbered list showing the basic usage flow. Must start with installation and end with expected result.
+Do not promise a shell for targets/actions that do not create sessions.
 
-### Section 3: Options
+### Options
+
+Document module-specific options, changed inherited defaults, conditional behavior, and operationally important advanced options. Match spelling and case exactly:
 
 ```markdown
 ## Options
 
 ### TARGETURI
 
-The base path to the web application. Default: `/`.
+The Acme App base path. The default is `/`.
 
-### USERNAME
+### VerifyTimeout
 
-The username or email address to authenticate with.
-
-### PASSWORD
-
-The password for the specified user account.
+The number of seconds to wait for the asynchronous job to finish. The default
+is 60 seconds.
 ```
 
-Document each custom option (not inherited ones like RHOSTS/RPORT). Include the default value if relevant.
+Cross-check every registered option/default against the document. Remove stale options when code changes.
 
-### Section 4: Scenarios
+### Scenarios
 
-````markdown
+Scenarios must be supplied and refreshed by a human from real target output. An agent may format user-provided output but must not invent:
+
+- console lines or success messages;
+- session numbers, timestamps, payload sizes, ports, or credentials;
+- product/OS versions or architecture;
+- cleanup/reporting output.
+
+Each scenario heading identifies product version, OS/container image, architecture, target, and meaningful payload type. Include `check`, exploitation/gathering, proof of effect, cleanup, and an immediate rerun where repeatability matters.
+
+```markdown
 ## Scenarios
 
-### Acme WebApp 4.2.0 on Ubuntu 22.04
+### Acme App 4.2.1 on Ubuntu 24.04 x64 - Unix/Linux Command target
 
+<!-- Replace this comment with human-recorded console output before submission. -->
 ```
-msf6 > use auxiliary/gather/webapp_data_dump
-msf6 auxiliary(gather/webapp_data_dump) > set RHOSTS 192.168.1.100
-RHOSTS => 192.168.1.100
-msf6 auxiliary(gather/webapp_data_dump) > set USERNAME admin@corp.local
-USERNAME => admin@corp.local
-msf6 auxiliary(gather/webapp_data_dump) > set PASSWORD Summer2024!
-PASSWORD => Summer2024!
-msf6 auxiliary(gather/webapp_data_dump) > run
 
-[*] Authenticating to API...
-[+] Authenticated successfully. Token obtained.
-[*] Enumerating resources...
-[+] Found 12 resources with 847 entries
-[*] Extracting data...
-[+] Data saved in: /home/user/.msf4/loot/20240101120000_default_192.168.1.100_webapp.data_123456.txt
-[*] Auxiliary module execution completed
-```
-````
+A placeholder is not acceptable in a submitted pull request; pause for human test output.
 
-Include the target OS/app version in the heading. Copy-paste actual msfconsole output. If the module works against multiple versions or OSes, include separate scenario sections for each.
+Redact credentials, API tokens, hashes, cookies, and other secrets from the captured output, including values generated for a disposable test account. Preserve the fact that a credential was created with placeholders such as `<generated-password>`.
 
----
+## Keep documentation diff-aware
 
-## Documentation file path convention
+Refresh the document whenever code changes:
 
-| Module path                                      | Documentation path                                             |
-| ------------------------------------------------ | -------------------------------------------------------------- |
-| `modules/exploits/linux/http/webapp_rce.rb`      | `documentation/modules/exploits/linux/http/webapp_rce.md`      |
-| `modules/auxiliary/gather/webapp_data_dump.rb`   | `documentation/modules/auxiliary/gather/webapp_data_dump.md`   |
-| `modules/auxiliary/scanner/http/webapp_login.rb` | `documentation/modules/auxiliary/scanner/http/webapp_login.md` |
+- option names, casing, requiredness, conditions, or defaults;
+- target/action names or selection behavior;
+- default/compatible payload behavior;
+- printed status/error/cleanup lines;
+- exploit prerequisites, version range, or lab setup;
+- created artifacts, restoration, or cleanup order;
+- verification evidence and expected result.
 
-## Key guidelines
+Documentation for an existing module must be updated too; docs are not only a new-module requirement.
 
-- **Be specific**: Include exact version numbers, OS versions, and configuration details
-- **Include links**: Link to vulnerable software downloads, vendor advisories, CVE entries
-- **Show real output**: Copy-paste actual msfconsole sessions, not hypothetical ones
-- **Plan for the future**: Write as if someone will need to reproduce this setup in 5+ years
-- **Multiple scenarios**: If the module works against multiple versions or OSes, include separate scenarios for each
-- **Heading hierarchy**: Use `###` for OS/version headings under Scenarios, `####` for sub-scenarios. Never skip heading levels.
-- **Only relevant output**: Do not include unrelated module output, msfconsole banner text, or prior commands — only the output from the module being documented
-- **Document ALL custom options**: Every `register_options` entry needs a corresponding Options section entry with its default value
-- **No excessive escaping**: Do not escape characters that don't need escaping in Markdown (e.g., `\_` is unnecessary, use `_`)
+## Safety and validation
+
+- Use placeholders such as `<username>`, `<password>`, and `<api-token>` rather than real or real-looking secrets.
+- Do not include private IPs, credentials, keys, or hashes taken from an actual environment. Local/private lab addresses are allowed in genuine Scenarios when safe; unit/spec examples use TEST-NET-1 (`192.0.2.0/24`).
+- Ensure commands are copy/pasteable and fenced with the correct language.
+- Verify referenced files/URLs and pin versions where practical.
+- Run:
+
+  ```bash
+  ruby tools/dev/msftidy_docs.rb documentation/modules/<doc-type>/<path>/<name>.md
+  ```
+
+- Compare the final human Scenario with the final code after the last rebase/change.

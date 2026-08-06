@@ -1,352 +1,241 @@
-# HTTP Client Mixin Reference
+# HttpClient request and parsing patterns
 
-## Setup
+Use the framework client:
 
 ```ruby
 include Msf::Exploit::Remote::HttpClient
 ```
 
-This auto-registers: `RHOSTS`, `RPORT`, `VHOST`, `SSL`, `SSLCert`, `TARGETURI`, `HttpUsername`, `HttpPassword`, `UserAgent`, evasion options, and more.
+Inspect `lib/msf/core/exploit/remote/http_client.rb` and related specs when behavior matters. Do not infer the API solely from an older module.
 
-**Do NOT re-register these** — adding `Opt::RHOST`, `Opt::RPORT(80)`, `OptString.new('VHOST', ...)`, or `OptBool.new('SSL', ...)` in `register_options` causes duplicates and will be rejected in review.
+## Options and URI construction
 
-**Do NOT override `target_uri`** — the mixin defines this method. If you need the raw datastore value, use `datastore['TARGETURI']` directly.
+`HttpClient` already provides common options such as `RHOSTS`, `RPORT`, `VHOST`, `SSL`, and `HttpClientTimeout`. Do not re-register or manually pass datastore-backed values unless the current mixin API requires it. It does not register `TARGETURI`; modules that expose a configurable application path should register that option themselves.
 
----
+Register `TARGETURI` when the module uses an application base path, even when the default is `/`, so it appears in options with a product-specific description:
 
-## send_request_cgi(opts = {}, timeout = 20, disconnect = true)
+```ruby
+register_options(
+  [
+    OptString.new('TARGETURI', [true, 'The Acme App base path', '/acme/'])
+  ]
+)
+```
 
-Primary method for making HTTP requests. Returns `Rex::Proto::Http::Response` or `nil` on failure.
+Build paths with `normalize_uri`:
 
-### Options hash
+```ruby
+uri = normalize_uri(target_uri.path, 'api', 'v1', 'users')
+```
 
-| Key                | Type   | Default   | Description                                                                                    |
-| ------------------ | ------ | --------- | ---------------------------------------------------------------------------------------------- |
-| `'method'`         | String | `'GET'`   | HTTP method (`GET`, `POST`, `PUT`, `DELETE`, etc.)                                             |
-| `'uri'`            | String | `'/'`     | Request URI path                                                                               |
-| `'vars_get'`       | Hash   | `{}`      | Query string parameters `{ 'key' => 'val' }`                                                   |
-| `'vars_post'`      | Hash   | `{}`      | POST form parameters `{ 'key' => 'val' }`                                                      |
-| `'data'`           | String | `''`      | Raw POST body (use instead of `vars_post` for JSON/XML/raw)                                    |
-| `'ctype'`          | String | auto      | Content-Type header. Auto-set to `application/x-www-form-urlencoded` for POST with `vars_post` |
-| `'headers'`        | Hash   | `{}`      | Additional HTTP headers `{ 'X-Custom' => 'value' }`                                            |
-| `'cookie'`         | String | nil       | Cookie header value `'key=val; key2=val2'`                                                     |
-| `'agent'`          | String | datastore | User-Agent header                                                                              |
-| `'vhost'`          | String | nil       | Host header override                                                                           |
-| `'keep_cookies'`   | Bool   | false     | Auto-store `Set-Cookie` responses in `cookie_jar`                                              |
-| `'vars_form_data'` | Array  | `[]`      | Multipart form fields                                                                          |
-| `'encode_params'`  | Bool   | true      | URI-encode parameter names and values                                                          |
-| `'version'`        | String | `'1.1'`   | HTTP version                                                                                   |
+`normalize_uri` joins path segments; it is not a general encoder for user-controlled path data. Use the endpoint's required escaping helper for dynamic values and test reserved characters. Do not override the mixin's `target_uri` method.
 
-### Common patterns
+Use `full_uri(path)` when output needs an absolute URL. For raw host/port output outside this helper, use `Rex::Socket.to_authority` so IPv6 is valid.
 
-**GET with query parameters:**
+## Basic requests
 
 ```ruby
 res = send_request_cgi(
   'method' => 'GET',
-  'uri'    => normalize_uri(target_uri.path, 'api', 'users'),
-  'vars_get' => {
-    'page'  => '1',
-    'limit' => '100'
-  }
+  'uri' => normalize_uri(target_uri.path, 'api', 'status'),
+  'vars_get' => { 'verbose' => 'true' },
+  'headers' => { 'Accept' => 'application/json' }
 )
 ```
 
-**POST with form data:**
+Common request keys include:
+
+| Key | Purpose |
+| --- | --- |
+| `'method'` | HTTP method; defaults according to the helper |
+| `'uri'` | Normalized path |
+| `'vars_get'` | Query parameters |
+| `'vars_post'` | URL-encoded form parameters |
+| `'vars_form_data'` | Multipart form parts |
+| `'data'` | Raw request body |
+| `'ctype'` | Content-Type for a raw body |
+| `'headers'` | Additional headers |
+| `'cookie'` | Explicit cookie string when a jar is inappropriate |
+| `'keep_cookies'` | Store/reuse cookies through the mixin jar |
+
+Examples:
 
 ```ruby
+# URL-encoded form
 res = send_request_cgi(
-  'method'    => 'POST',
-  'uri'       => normalize_uri(target_uri.path, 'login'),
+  'method' => 'POST',
+  'uri' => normalize_uri(target_uri.path, 'login'),
   'vars_post' => {
     'username' => datastore['USERNAME'],
     'password' => datastore['PASSWORD']
-  }
+  },
+  'keep_cookies' => true
 )
-```
 
-**POST with JSON body:**
-
-```ruby
+# JSON
 res = send_request_cgi(
   'method' => 'POST',
-  'uri'    => normalize_uri(target_uri.path, 'api', 'auth'),
-  'ctype'  => 'application/json',
-  'data'   => { username: user, password: pass }.to_json
+  'uri' => normalize_uri(target_uri.path, 'api', 'jobs'),
+  'ctype' => 'application/json',
+  'data' => { command: payload.encoded }.to_json
+)
+
+# Multipart
+res = send_request_cgi(
+  'method' => 'POST',
+  'uri' => normalize_uri(target_uri.path, 'upload'),
+  'vars_form_data' => [
+    {
+      'name' => 'file',
+      'filename' => filename,
+      'content_type' => 'application/zip',
+      'encoding' => 'binary',
+      'data' => archive
+    },
+    { 'name' => 'description', 'data' => 'Module upload' }
+  ]
 )
 ```
 
-**POST with XML/SOAP body:**
+Do not combine a manually constructed multipart `'data'` body with `vars_post`; use `vars_form_data` or `Rex::MIME::Message` consistently.
 
-When constructing SOAP envelopes that embed user-supplied values (usernames, passwords, search terms), **always XML-escape** the values to prevent XML injection. Define a private helper:
+## Timeout policy
+
+`send_request_cgi` takes an optional positional timeout after the options hash:
 
 ```ruby
-def xml_escape(str)
-  str.to_s.gsub('&', '&amp;').gsub('<', '&lt;').gsub('>', '&gt;').gsub('"', '&quot;').gsub("'", '&apos;')
+send_request_cgi({ 'method' => 'GET', 'uri' => uri }, 5)
+```
+
+Do not write this syntactically incorrect form:
+
+```text
+send_request_cgi({ 'method' => 'GET', 'uri' => uri }), 5
+```
+
+Use the framework default for ordinary requests:
+
+```ruby
+res = send_request_cgi('method' => 'GET', 'uri' => uri)
+```
+
+Use an explicit value only when protocol behavior establishes a reason:
+
+```ruby
+# Fire-and-forget: this endpoint runs the payload in the request and normally
+# does not return before the session is established.
+send_request_cgi({ 'method' => 'GET', 'uri' => payload_uri }, 5)
+```
+
+Guidance:
+
+- Do not scatter arbitrary `10`/`20` second values through helper methods.
+- If a wrapper takes an optional timeout, omit the second argument when the option is nil rather than replacing it with another hardcoded default.
+- Include `Msf::Exploit::Retry` for asynchronous state changes. Use `retry_until_truthy(timeout: datastore['VerifyTimeout'])` for exponential backoff or `poll_until_truthy(timeout: ..., interval: ...)` for fixed-interval state checks. Make the advanced option CamelCase and explain the product behavior.
+- A `nil` response from a fire-and-forget request can be expected, but it is not success evidence by itself. Confirm a session, changed state, created resource, marker, or other independent effect.
+- Very short timeouts can truncate a normal response or create repeated handler connections. Test realistic latency and payload sizes.
+
+## Response handling
+
+`send_request_cgi` commonly returns `nil` for connection failure or timeout. Branch before calling response methods:
+
+```ruby
+res = send_request_cgi('method' => 'GET', 'uri' => uri)
+fail_with(Failure::Unreachable, 'No response from the Acme App endpoint') unless res
+fail_with(Failure::UnexpectedReply, "Unexpected HTTP response code #{res.code}") unless res.code == 200
+```
+
+Inside `check`, return a CheckCode instead of failing:
+
+```ruby
+return Exploit::CheckCode::Unknown('No response from the status endpoint') unless res
+```
+
+Use `.to_s` when doing body string operations:
+
+```ruby
+return Exploit::CheckCode::Detected('Acme App responded without a version') if res.body.to_s.include?('Acme App')
+```
+
+Do not add a broad `rescue Rex::ConnectionError` around `send_request_cgi` merely because raw TCP code uses it. The HTTP helper normally translates connection failures into `nil`. Rescue only exceptions that the exact helper or parser can raise and always preserve the `check` contract.
+
+For state-changing requests, validate the product-specific response body/header/state—not only `200 OK`.
+
+## Structured parsing
+
+### JSON
+
+Always use the response helper:
+
+```ruby
+document = res.get_json_document
+job_id = document['id'].to_s if document.is_a?(Hash)
+unless job_id&.match?(/\A\d+\z/)
+  fail_with(Failure::UnexpectedReply, 'The response did not contain the expected numeric job ID')
 end
 ```
 
-SOAP 1.2 uses `application/soap+xml`; SOAP 1.1 uses `text/xml`. Match the target service's protocol version.
+`get_json_document` returns an empty hash when parsing fails, so `is_a?(Hash)` alone does not prove that the body was valid JSON. Validate product-specific keys, types, and values; use the same shape failure for malformed JSON and a syntactically valid but unexpected document.
+
+Do not call `JSON.parse(res.body)` directly. Verify that the returned shape and required keys are present before using them.
+
+### HTML
+
+Use precise CSS/XPath selectors:
 
 ```ruby
-# SOAP 1.2 example (application/soap+xml)
-body = '<AuthRequest xmlns="urn:vendorAuth">' \
-       "<account by=\"name\">#{xml_escape(datastore['USERNAME'])}</account>" \
-       "<password>#{xml_escape(datastore['PASSWORD'])}</password>" \
-       '</AuthRequest>'
-
-envelope = '<soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope">' \
-           "<soap:Body>#{body}</soap:Body>" \
-           '</soap:Envelope>'
-
-res = send_request_cgi(
-  'method' => 'POST',
-  'uri'    => normalize_uri(target_uri.path, 'service', 'soap'),
-  'ctype'  => 'application/soap+xml; charset=UTF-8',
-  'data'   => envelope
-)
+document = res.get_html_document
+csrf = document.at_css('input[name="_csrf"]')&.[]('value')
+fail_with(Failure::UnexpectedReply, 'CSRF token was not present') if csrf.blank?
 ```
 
-**Request with custom headers and cookie:**
+Do not regex an entire HTML document for a form field. If the value is JavaScript data, narrow the input first:
 
 ```ruby
-res = send_request_cgi(
-  'method'  => 'GET',
-  'uri'     => normalize_uri(target_uri.path, 'admin', 'config'),
-  'cookie'  => "SESSION_TOKEN=#{@auth_token}",
-  'headers' => {
-    'X-CSRF-Token' => @csrf_token,
-    'Accept' => 'application/json'
-  }
-)
+script = document.css('script').find { |node| node.text.include?('window.appConfig') }
+token = script&.text&.match(/csrfToken:\s*['"]([^'"]+)['"]/)&.captures&.first
 ```
 
----
+The regex now parses JavaScript text rather than HTML structure. Keep selectors and regexes specific enough to avoid unrelated products and resilient across supported versions. Do not assume an English UI string is stable across locales.
 
-## send_request_cgi!(opts = {}, timeout = 20, redirect_depth = 1)
-
-Same as `send_request_cgi` but **auto-follows redirects** (301/302/303/307/308). Use when login endpoints redirect after auth.
-
-### Timeout for payload-triggering requests
-
-When the request that triggers a payload (e.g., RCE) will hang or never return, set `timeout: 0` so the framework doesn't wait:
+### XML and SOAP
 
 ```ruby
-# The exploit-triggering request — server won't respond
+document = res.get_xml_document
+document.remove_namespaces!
+value = document.at_xpath('//Envelope/Body/GetVersionResponse/Version')&.text
+```
+
+Escape every untrusted value inserted into XML. Prefer a framework builder/helper when one exists; otherwise use a clear escaping helper such as `CGI.escapeHTML` after verifying it covers the required XML context.
+
+## Cookies and redirects
+
+Use the cookie jar for multi-step flows:
+
+```ruby
 send_request_cgi(
   'method' => 'POST',
-  'uri'    => normalize_uri(target_uri.path, 'vulnerable'),
-  'data'   => payload_data
-), 0  # timeout = 0, don't wait for response
-```
-
-For session-based exploits, rely on `WfsDelay` (Wait For Session Delay) — it's already a registered option. Don't create a custom `WAIT` option that duplicates it.
-
-```ruby
-res = send_request_cgi!(
-  { 'method' => 'POST', 'uri' => '/login', 'vars_post' => creds },
-  20,  # timeout
-  3    # follow up to 3 redirects
-)
-```
-
----
-
-## send_request_raw(opts = {}, timeout = 20, disconnect = false)
-
-Low-level request without CGI processing. Does not handle `vars_get`/`vars_post` — you build the full request manually. Use for protocol-level edge cases.
-
----
-
-## Response Object (Rex::Proto::Http::Response)
-
-**Always check for nil** — connection failures return `nil`:
-
-```ruby
-res = send_request_cgi(...)
-fail_with(Failure::Unreachable, 'Connection failed') unless res
-```
-
-**Body can be nil** — always guard with `.to_s` when pattern matching:
-
-```ruby
-# WRONG — raises NoMethodError if body is nil
-res.body.include?('success')
-
-# CORRECT — safe even when body is nil
-res.body.to_s.include?('success')
-```
-
-### Attributes
-
-| Method    | Type      | Description                                                       |
-| --------- | --------- | ----------------------------------------------------------------- |
-| `code`    | Integer   | HTTP status code (200, 301, 404, 500...)                          |
-| `message` | String    | Status reason phrase ("OK", "Not Found")                          |
-| `body`    | String    | Response body                                                     |
-| `headers` | Hash-like | Response headers (`headers['Location']`, `headers['Set-Cookie']`) |
-
-### Parsing methods
-
-| Method               | Returns        | Description                                                                                       |
-| -------------------- | -------------- | ------------------------------------------------------------------------------------------------- |
-| `get_json_document`  | Hash           | `JSON.parse(body)`, returns `{}` on parse error — **always prefer this over manual `JSON.parse`** |
-| `get_html_document`  | Nokogiri::HTML | Parsed HTML document                                                                              |
-| `get_xml_document`   | Nokogiri::XML  | Parsed XML document                                                                               |
-| `get_cookies`        | String         | Parsed Set-Cookie as `"k=v; k2=v2"` for reuse                                                     |
-| `get_cookies_parsed` | Hash           | Parsed cookie key-value pairs                                                                     |
-| `get_hidden_inputs`  | Array\<Hash\>  | Hidden form inputs per form                                                                       |
-| `redirect?`          | Boolean        | True if response is a redirect                                                                    |
-| `redirection`        | URI            | Location header as URI                                                                            |
-
-### Response handling patterns
-
-```ruby
-# Basic nil + status check
-res = send_request_cgi('uri' => '/api/data')
-fail_with(Failure::Unreachable, 'Connection failed') unless res
-fail_with(Failure::UnexpectedReply, "Unexpected status: #{res.code}") unless res.code == 200
-
-# JSON response — ALWAYS use get_json_document, never manual JSON.parse
-json = res.get_json_document
-fail_with(Failure::UnexpectedReply, 'Invalid JSON response') if json.empty?
-token = json['authToken'] || fail_with(Failure::UnexpectedReply, 'No auth token in response')
-
-# XML/SOAP response — use get_xml_document or Nokogiri::XML directly
-xml = res.get_xml_document
-token = xml.at_xpath('//authToken')&.text
-fail_with(Failure::UnexpectedReply, 'Auth token not found in SOAP response') unless token
-
-# For SOAP responses with multiple namespaces, remove_namespaces! simplifies XPath:
-doc = Nokogiri::XML(res.body.to_s)
-doc.remove_namespaces!
-subject = doc.at_xpath('//Subject')&.text
-items = doc.xpath('//ItemId').map { |n| n['Id'] }
-
-# HTML scraping
-html = res.get_html_document
-csrf = html.at_css('input[name="csrf_token"]')&.attr('value')
-
-# Cookie extraction
-cookies = res.get_cookies
-# Use in subsequent request:
-send_request_cgi('uri' => '/dashboard', 'cookie' => cookies)
-```
-
----
-
-## Cookie Handling
-
-### Automatic (recommended for multi-step flows)
-
-When `keep_cookies: true` is set, the cookie jar automatically stores and replays cookies — **do NOT manually extract and replay cookies alongside `keep_cookies`** (this causes duplicate cookies).
-
-```ruby
-# First request — store cookies automatically
-res = send_request_cgi(
-  'uri' => '/login',
-  'method' => 'POST',
-  'vars_post' => { 'user' => u, 'pass' => p },
+  'uri' => login_uri,
+  'vars_post' => credentials,
   'keep_cookies' => true
 )
 
-# Subsequent requests automatically include stored cookies
 res = send_request_cgi(
-  'uri' => '/dashboard',
+  'method' => 'GET',
+  'uri' => dashboard_uri,
   'keep_cookies' => true
 )
 ```
 
-### Manual
+Use `send_request_cgi!` only when its redirect-following behavior is desired and validated. Redirects can cross paths/hosts or turn an authentication failure into a misleading final response; inspect the effective content and cookies.
 
-```ruby
-@auth_cookie = res.get_cookies
-# ...
-res = send_request_cgi('uri' => '/api', 'cookie' => @auth_cookie)
-```
+## HTTP QA
 
-### Cookie jar methods
-
-| Method               | Description            |
-| -------------------- | ---------------------- |
-| `cookie_jar.cookies` | All stored cookies     |
-| `cookie_jar.clear`   | Remove all cookies     |
-| `cookie_jar.empty?`  | Check if jar is empty  |
-| `cookie_jar.cleanup` | Remove expired cookies |
-
----
-
-## URI Helpers
-
-### normalize_uri(\*segments)
-
-Joins path segments, collapses double slashes, ensures leading slash:
-
-```ruby
-normalize_uri(target_uri.path, 'service', 'soap')
-# => "/service/soap" (if TARGETURI is "/")
-# => "/webapp/service/soap" (if TARGETURI is "/webapp")
-```
-
-### target_uri
-
-Returns a `URI` object from `datastore['TARGETURI']`:
-
-```ruby
-target_uri.path  # => "/webapp"
-```
-
-### full_uri(path = nil)
-
-Returns the full URL string:
-
-```ruby
-full_uri('/api/v1')  # => "https://target:443/api/v1"
-```
-
----
-
-## Authentication Helpers
-
-### Basic auth
-
-```ruby
-# Auto-populated from HttpUsername/HttpPassword datastore options
-# OR set manually:
-send_request_cgi(
-  'uri' => '/api/secure',
-  'headers' => {
-    'Authorization' => basic_auth(user, pass)
-  }
-)
-```
-
----
-
-## SSL
-
-SSL is handled automatically via the `SSL` and `RPORT` datastore options. Common setup:
-
-```ruby
-'DefaultOptions' => {
-  'RPORT' => 443,
-  'SSL'   => true
-}
-```
-
-Check at runtime with `ssl` (boolean) or `datastore['SSL']`.
-
----
-
-## Common Datastore Accessors
-
-| Method                      | Description                        |
-| --------------------------- | ---------------------------------- |
-| `rhost`                     | Remote host (`RHOSTS` first value) |
-| `rport`                     | Remote port                        |
-| `ssl`                       | Whether SSL is enabled (boolean)   |
-| `vhost`                     | Virtual host                       |
-| `datastore['TARGETURI']`    | Target base URI                    |
-| `datastore['USERNAME']`     | Custom option value                |
-| `datastore['HttpUsername']` | HTTP basic auth user               |
-| `datastore['HttpPassword']` | HTTP basic auth pass               |
+- Nil response before every parser/body access.
+- Malformed and unexpected JSON/XML/HTML shapes.
+- Redirect, authentication failure, alternate base path, VHOST, HTTP and HTTPS.
+- Reserved characters in dynamic query/form/path values.
+- Localized/non-English target where UI strings are used.
+- Product-specific evidence after mutations.
+- Default timeout on ordinary requests; justified explicit timeout only where required.
+- No raw multipart plus `vars_post`, no manual JSON parsing, and no broad exception swallowing.

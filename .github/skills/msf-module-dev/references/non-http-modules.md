@@ -1,351 +1,226 @@
-# Non-HTTP Module Patterns
+# Scanner, protocol, local, and post module patterns
 
-Reference for writing MSF modules that don't use the HttpClient mixin: scanners, TCP/UDP services, local exploits, and post-exploitation modules.
+Inspect the current protocol/post mixin and its specs before writing connection, reporting, or file logic. Mature mixins often own options, connection lifecycle, and service reporting.
 
----
+## Scanner modules
 
-## Scanner Modules (`Msf::Auxiliary::Scanner`)
-
-The Scanner mixin handles RHOSTS iteration, threading, and progress display. You implement `run_host(ip)` instead of `run`.
-
-### Key rules
-
-- `include Msf::Auxiliary::Scanner` **after** protocol mixins (order matters)
-- Implement `def run_host(ip)` — called once per host in RHOSTS
-- Do NOT define `def run` — the Scanner mixin provides it
-- `RHOSTS` and `THREADS` are auto-registered
-- Use `peer` for log prefixing (returns `"host:port"`)
-
-### Scanner template
-
-```ruby
-# frozen_string_literal: true
-
-class MetasploitModule < Msf::Auxiliary
-  include Msf::Exploit::Remote::HttpClient  # or Tcp, Ftp, SMB, etc.
-  include Msf::Auxiliary::Scanner            # MUST come after protocol mixins
-  include Msf::Auxiliary::Report
-
-  def initialize(info = {})
-    super(
-      update_info(
-        info,
-        'Name' => 'Vendor Product Version Scanner',
-        'Description' => %q{
-          Scans for Vendor Product instances and fingerprints the version.
-        },
-        'Author' => ['Author Name'],
-        'License' => MSF_LICENSE,
-        'Notes' => {
-          'Stability' => [CRASH_SAFE],
-          'Reliability' => [],
-          'SideEffects' => []
-        }
-      )
-    )
-
-    register_options([
-      Opt::RPORT(8080)
-    ])
-  end
-
-  def run_host(ip)
-    res = send_request_cgi('uri' => normalize_uri(target_uri.path))
-    return unless res
-
-    if res.body =~ /Version: (\d+\.\d+\.\d+)/
-      version = Regexp.last_match(1)
-      print_good("#{peer} - Detected version #{version}")
-      report_service(host: ip, port: rport, proto: 'tcp', name: 'http', info: "Product #{version}")
-    else
-      vprint_status("#{peer} - Service detected but version unknown")
-    end
-  end
-end
-```
-
-### Batch scanner (alternative)
-
-For protocols where per-host connections are expensive, implement `run_batch` + `run_batch_size` instead of `run_host`:
-
-```ruby
-def run_batch_size
-  50
-end
-
-def run_batch(hosts)
-  # hosts is an array of IP strings
-  hosts.each do |ip|
-    # process batch
-  end
-end
-```
-
----
-
-## TCP-Based Modules (`Msf::Exploit::Remote::Tcp`)
-
-For raw TCP services without a dedicated protocol mixin.
-
-### Key rules
-
-- `include Msf::Exploit::Remote::Tcp` — auto-registers `RHOSTS`, `RPORT`, `SSL`, `ConnectTimeout`
-- Use `connect` to open a socket, `disconnect` to close
-- Use `sock.put(data)` to send, `sock.get_once(length, timeout)` to receive
-- Always handle connection failures
-
-### TCP module pattern
+Use `Msf::Auxiliary::Scanner` and implement `run_host(ip)` rather than `run`:
 
 ```ruby
 # frozen_string_literal: true
 
 class MetasploitModule < Msf::Auxiliary
   include Msf::Exploit::Remote::Tcp
+  include Msf::Auxiliary::Scanner
   include Msf::Auxiliary::Report
 
   def initialize(info = {})
     super(
       update_info(
         info,
-        'Name' => 'Vendor Service Banner Grab',
+        'Name' => 'Acme Protocol Version Scanner',
         'Description' => %q{
-          Connects to the target service and grabs the banner.
+          This module identifies Acme Protocol services and reports their version.
         },
-        'Author' => ['Author Name'],
+        'Author' => ['Contributor'],
         'License' => MSF_LICENSE,
+        'References' => [],
+        'DefaultOptions' => {
+          'RPORT' => 31337
+        },
         'Notes' => {
           'Stability' => [CRASH_SAFE],
           'Reliability' => [],
-          'SideEffects' => []
+          'SideEffects' => [IOC_IN_LOGS]
         }
       )
     )
-
-    register_options([
-      Opt::RPORT(9090)
-    ])
   end
 
-  def run
+  def run_host(ip)
     connect
-    banner = sock.get_once(1024, 10)
-    disconnect
+    sock.put("VERSION\r\n")
+    banner = sock.get_once(1024, 5).to_s
+    return unless banner.start_with?('ACME/')
 
-    if banner && !banner.empty?
-      print_good("Banner: #{banner.strip}")
-      report_service(host: rhost, port: rport, proto: 'tcp', name: 'vendor_svc', info: banner.strip)
-    else
-      print_error('No banner received')
-    end
+    version = banner.split('/', 2).last.to_s.strip
+    print_good("#{Rex::Socket.to_authority(ip, rport)} - Acme Protocol #{version}")
+    report_service(
+      host: ip,
+      port: rport,
+      proto: 'tcp',
+      name: 'acme',
+      info: "Acme Protocol #{version}"
+    )
   rescue Rex::ConnectionError => e
-    fail_with(Failure::Unreachable, e.message)
+    vprint_error("#{Rex::Socket.to_authority(ip, rport)} - Connection failed: #{e.message}")
+  ensure
+    disconnect
   end
 end
 ```
 
----
+- `RHOSTS` and `THREADS` come from Scanner; do not re-register them.
+- Keep per-host state local to `run_host`; scanner instances may be used concurrently.
+- A nil/empty banner is not a product match.
+- Use `Rex::Socket.to_authority` for explicit host/port output.
+- Verify whether the protocol mixin already reports host/service before adding a duplicate call.
 
-## FTP Modules (`Msf::Exploit::Remote::Ftp`)
+## Raw TCP modules
 
-### Key mixins and methods
-
-```ruby
-include Msf::Exploit::Remote::Ftp
-```
-
-Auto-registers: `RPORT` (21), `FTPUSER`, `FTPPASS`, `FTPTimeout`, `FTPDEBUG`.
-
-| Method                                  | Description                                 |
-| --------------------------------------- | ------------------------------------------- |
-| `connect_login`                         | Connect + authenticate (returns true/false) |
-| `connect`                               | Open FTP control connection                 |
-| `send_cmd(args, recv = true)`           | Send an FTP command                         |
-| `send_cmd_data(args, data, mode = 'a')` | Send data via a data channel                |
-| `data_connect(mode = 'a')`              | Open a data channel                         |
-| `disconnect`                            | Close connections                           |
-
----
-
-## SMB Modules (`Msf::Exploit::Remote::SMB`)
+Use `connect`, `sock.put`, `sock.get_once`, and `disconnect`. Distinguish transport failure from an unexpected protocol response:
 
 ```ruby
-include Msf::Exploit::Remote::DCERPC
-include Msf::Exploit::Remote::SMB::Client
+def check
+  connect
+  sock.put(probe)
+  response = sock.get_once(4096, 5)
+  return Exploit::CheckCode::Unknown('The service closed the connection without a response') if response.blank?
+  return Exploit::CheckCode::Safe('The response did not match the Acme Protocol fingerprint') unless acme_response?(response)
+
+  version = extract_version(response)
+  return Exploit::CheckCode::Detected('Acme Protocol was detected without a version') unless version
+  return Exploit::CheckCode::Safe("Acme Protocol #{version} is not affected") unless vulnerable_version?(version)
+
+  Exploit::CheckCode::Appears("Acme Protocol #{version} is affected")
+rescue Rex::ConnectionError => e
+  Exploit::CheckCode::Unknown("Connection failed: #{e.message}")
+ensure
+  disconnect
+end
 ```
 
-Auto-registers: `RPORT` (445), `SMBUser`, `SMBPass`, `SMBDomain`, `SMB::ProtocolVersion`.
+Use `fail_with(Failure::Unreachable, ...)` in `run`/`exploit`, not in `check`. Avoid broad rescues that turn programmer/parser errors into a misleading connection failure.
 
-Common methods: `connect`, `smb_login`, `smb_create(filename)`, `smb_write`.
+If a payload format stores an IPv4 address in a raw AF_INET field, explicitly reject IPv6 addresses and hostnames and spec those failures. Do not silently truncate or resolve differently from framework expectations.
 
----
+## LoginScanner contracts
 
-## SSH Modules
+When adding or changing `Metasploit::Framework::LoginScanner` code, treat it as library code:
 
-SSH modules commonly use `Net::SSH` via the framework's SSH mixin:
+- add focused/shared RSpec coverage;
+- document public APIs with YARD;
+- reuse one connection for banner negotiation and authentication when the protocol permits it;
+- rescue specific network/protocol exceptions, not `StandardError`;
+- return `UNABLE_TO_CONNECT` for nil replies, timeout, reset, or transport failure;
+- return the incorrect-credential status only after an explicit authentication rejection;
+- return success only after protocol-specific proof of authentication;
+- keep proof/status metadata consistent with existing LoginScanner result objects.
+
+Test at least: success, explicit rejection, nil read, timeout, reset, malformed banner, and connection count. Do not report every successful login as a vulnerability. Let the scanner/protocol layer own host, service, and credential records where its API already does so; avoid duplicate module-level notes and reports.
+
+Authentication brute force normally implies both `IOC_IN_LOGS` and `ACCOUNT_LOCKOUTS` in module Notes.
+
+## Protocol mixins
+
+- FTP: use the current FTP mixin (`connect_login`, `send_cmd`, and its reporting behavior).
+- SMB: use the current RubySMB-backed client mixins; do not implement SMB framing manually.
+- SSH: use framework SSH/login-scanner support and its credential result contract.
+- LDAP, DCERPC, SMB, and modern HTTP mixins may already create layered services/resources. Inspect their `report_*_service` helpers before adding another.
+- For complex binary parsing with BinData, RASN1, or Rex::Struct2, link the governing RFC/specification in a code comment and add specs.
+
+## Session ownership and module type
+
+If the operation fundamentally requires an existing session, it normally belongs under `modules/post` (or `Msf::Exploit::Local` for privilege escalation), not an auxiliary module with a hand-registered `SESSION` option and custom session plumbing.
+
+Use:
+
+- `Msf::Exploit::Local` when the outcome is local exploitation/privilege escalation and a payload/session is produced;
+- `Msf::Post` for gathering, administration, persistence, and other work through an existing session.
+
+Declare the correct `Platform` and `SessionTypes`. Use architecture constants and session APIs, not regexes over human-readable architecture strings.
+
+## Local exploit checks
+
+Missing observability is not proof of safety:
 
 ```ruby
-include Msf::Exploit::Remote::SSH
+def check
+  return Exploit::CheckCode::Unknown('The session cannot determine the current privilege level') unless current_user
+  return Exploit::CheckCode::Safe("The required file #{target_path} does not exist") unless file_exist?(target_path)
+  return Exploit::CheckCode::Unknown('The session lacks permission to inspect the vulnerable file') unless readable?(target_path)
+
+  version = vulnerable_component_version
+  return Exploit::CheckCode::Unknown('The component version could not be determined') unless version
+  return Exploit::CheckCode::Safe("Component version #{version} is not affected") unless vulnerable_version?(version)
+
+  Exploit::CheckCode::Appears("Component version #{version} is affected")
+end
 ```
 
-For scanner-style SSH modules, look at existing modules in `modules/auxiliary/scanner/ssh/`.
+Use `Unknown`, not `Safe`, when missing privileges, permissions, a session capability, or response data prevents assessment. `Safe` needs affirmative evidence that the exploit path is not applicable.
 
----
+Do not add a precondition that accidentally rejects the low-privileged user the exploit is designed to elevate.
 
-## Local Exploit Modules (`Msf::Exploit::Local`)
+## Remote file operations
 
-For privilege escalation and post-exploitation exploits that require an existing session.
+Include `Msf::Post::File` and check every mutation result:
 
-### Key rules
+```ruby
+fail_with(Failure::NotFound, "Target file #{target_path} does not exist") unless file_exist?(target_path)
+fail_with(Failure::NoAccess, "Target file #{target_path} is not writable") unless writable?(target_path)
 
-- Inherit from `Msf::Exploit::Local` (not `Msf::Exploit::Remote`)
-- **MUST** specify `'SessionTypes'` in metadata (e.g., `['shell', 'meterpreter']`)
-- Use `prepend Msf::Exploit::Remote::AutoCheck` — always prepend, never include
-- Common mixins: `Msf::Post::File`, `Msf::Post::Linux::Priv`, `Msf::Post::Linux::Kernel`, `Msf::Exploit::EXE`, `Msf::Exploit::FileDropper`
-- Use `session` object for all target interaction
-- Use `cmd_exec(command)` to run commands on target
-- Use `write_file(path, data)` / `read_file(path)` from `Msf::Post::File`
+original = read_file(target_path)
+fail_with(Failure::UnexpectedReply, "Could not read #{target_path}") if original.nil?
 
-### Local exploit template
+# A failed write may still be partial. Arm restoration before attempting it.
+@file_to_restore = { path: target_path, data: original }
+
+unless write_file(target_path, replacement)
+  fail_with(Failure::UnexpectedReply, "Failed to write #{target_path}")
+end
+
+written = read_file(target_path)
+fail_with(Failure::UnexpectedReply, "Could not verify #{target_path}") unless written == replacement
+```
+
+Rules:
+
+- Check `write_file`, `append_file`, `upload_file`, and equivalent return values.
+- Verify the resulting file/state where practical; command exit status alone may lie.
+- Preserve original contents/permissions/configuration and restore that captured state, not an assumed default.
+- Register only artifacts created by the module. Use `register_file_for_cleanup` for files and `register_dir_for_cleanup` for directories.
+- If editing a pre-existing file, FileDropper deletion is usually wrong; capture the original state and implement explicit restoration.
+- Arm restoration before calling a write API because a false/exceptional return may follow a partial write; cleanup must consume that state on both failure and success.
+- Persistence mixins may invoke installation hooks automatically. Inspect their lifecycle before calling an install method yourself.
+
+Test write failure, partial write, verification failure, cleanup failure, and repeated execution.
+
+## Process execution
+
+Prefer the structured API:
+
+```ruby
+output = create_process(
+  '/usr/bin/id',
+  args: ['-u'],
+  time_out: 15,
+  opts: { 'Subshell' => false }
+)
+```
+
+Use `create_process(executable, args: [], time_out: 15, opts: {})` instead of deprecated `cmd_exec` forms that pass command and arguments separately. A single-string `cmd_exec(command)` may still be appropriate where a shell command is genuinely required; avoid unsafe concatenation of untrusted values.
+
+## Post module pattern
 
 ```ruby
 # frozen_string_literal: true
 
-class MetasploitModule < Msf::Exploit::Local
-  Rank = ExcellentRanking
-
-  include Msf::Post::File
-  include Msf::Post::Linux::Priv
-  include Msf::Exploit::EXE
-  include Msf::Exploit::FileDropper
-
-  prepend Msf::Exploit::Remote::AutoCheck
-
-  def initialize(info = {})
-    super(
-      update_info(
-        info,
-        'Name' => 'Product Local Privilege Escalation',
-        'Description' => %q{
-          Description of the local vulnerability and how it achieves
-          privilege escalation.
-        },
-        'Author' => ['Author Name'],
-        'License' => MSF_LICENSE,
-        'References' => [
-          ['CVE', 'YYYY-NNNNN']
-        ],
-        'DisclosureDate' => '2026-01-15',
-        'Platform' => ['unix', 'linux'],
-        'SessionTypes' => ['shell', 'meterpreter'],
-        'Arch' => [ARCH_X64, ARCH_CMD],
-        'Targets' => [
-          ['Automatic', {}]
-        ],
-        'DefaultTarget' => 0,
-        'Privileged' => true,
-        'Notes' => {
-          'Stability' => [CRASH_SAFE],
-          'Reliability' => [REPEATABLE_SESSION],
-          'SideEffects' => [ARTIFACTS_ON_DISK]
-        }
-      )
-    )
-  end
-
-  def check
-    output = cmd_exec('cat /etc/product_version')
-    if output =~ /(\d+\.\d+)/
-      version = Rex::Version.new(Regexp.last_match(1))
-      if version < Rex::Version.new('2.0')
-        return CheckCode::Appears("Version #{version} is vulnerable")
-      end
-    end
-    CheckCode::Safe
-  end
-
-  def exploit
-    unless is_root?
-      fail_with(Failure::NoAccess, 'Must run as root or with sudo')
-    end
-
-    payload_path = '/tmp/.payload'
-    write_file(payload_path, generate_payload_exe)
-    register_file_for_cleanup(payload_path)
-    cmd_exec("chmod +x #{payload_path}")
-    cmd_exec(payload_path)
-  end
-end
-```
-
-### AutoCheck (`prepend Msf::Exploit::Remote::AutoCheck`)
-
-- **Always use `prepend`**, never `include` — it wraps `exploit`/`run` to call `check` first
-- Auto-registers `AutoCheck` (default: true) and `ForceExploit` (default: false) advanced options
-- If `check` returns `Safe`, the exploit aborts unless `ForceExploit` is set
-- If `check` returns `Appears` or `Vulnerable`, exploitation proceeds
-
-### FileDropper (`Msf::Exploit::FileDropper`)
-
-Tracks files/dirs created on target and cleans them up after exploitation:
-
-```ruby
-include Msf::Exploit::FileDropper
-
-# In exploit method:
-register_file_for_cleanup('/tmp/payload.bin')
-register_dir_for_cleanup('/tmp/exploit_dir')
-```
-
-### Cleanup Method
-
-For custom cleanup logic (removing artifacts, restoring state), define a `cleanup` method. **Always call `super`** to ensure framework cleanup (including FileDropper) runs:
-
-```ruby
-def cleanup
-  # Custom cleanup logic here
-  remove_payload if @payload_deployed
-ensure
-  super
-end
-```
-
-Never put cleanup logic at the end of `exploit`/`run` — if the method raises an exception, that code won't execute. The `cleanup` method is called automatically regardless of success/failure.
-
----
-
-## Post-Exploitation Modules (`Msf::Post`)
-
-For modules that run after initial access via an existing session.
-
-### Key rules
-
-- Inherit from `Msf::Post`
-- **MUST** specify `'Platform'` and `'SessionTypes'`
-- `'SessionTypes'` can be: `'shell'`, `'meterpreter'`, `'powershell'`
-- Use `session` to interact: `session.type`, `session.platform`, `session.session_host`
-- Common mixins: `Msf::Post::File`, `Msf::Post::Windows::Registry`, `Msf::Post::Linux::Priv`
-- Use `sysinfo` for system information (meterpreter sessions)
-- Use `cmd_exec(command)` to run system commands
-
-### Post module template
-
-```ruby
 class MetasploitModule < Msf::Post
   include Msf::Post::File
-  include Msf::Auxiliary::Report
 
   def initialize(info = {})
     super(
       update_info(
         info,
-        'Name' => 'Multi Gather Application Credentials',
+        'Name' => 'Acme App Configuration Gather',
         'Description' => %q{
-          Extracts saved credentials from Application X config files.
+          This module gathers the Acme App configuration from an existing session.
         },
-        'Author' => ['Author Name'],
         'License' => MSF_LICENSE,
-        'Platform' => %w[linux win],
-        'SessionTypes' => %w[shell meterpreter],
+        'Author' => ['Contributor'],
+        'Platform' => %w[linux unix],
+        'SessionTypes' => %w[meterpreter shell],
         'Notes' => {
           'Stability' => [CRASH_SAFE],
           'Reliability' => [],
@@ -353,134 +228,55 @@ class MetasploitModule < Msf::Post
         }
       )
     )
+
+    register_options(
+      [
+        OptString.new('CONFIG_PATH', [true, 'Path to the Acme App configuration', '/etc/acme/config.yml'])
+      ]
+    )
   end
 
   def run
-    hostname = sysinfo.nil? ? cmd_exec('hostname') : sysinfo['Computer']
-    print_status("Running on #{hostname} (#{session.session_host})")
+    path = datastore['CONFIG_PATH']
+    fail_with(Failure::NotFound, "Configuration file #{path} does not exist") unless file_exist?(path)
+    fail_with(Failure::NoAccess, "Configuration file #{path} is not readable") unless readable?(path)
 
-    config = read_file('/etc/app/config.yml')
-    if config.nil? || config.empty?
-      print_error('Config file not found')
-      return
-    end
+    data = read_file(path)
+    fail_with(Failure::UnexpectedReply, "Could not read #{path}") if data.nil?
 
-    print_good('Found config file, extracting credentials...')
-    path = store_loot(
-      'app.config',
+    loot_path = store_loot(
+      'acme.config',
       'text/plain',
       session,
-      config,
-      'config.yml',
-      'Application config file'
+      data,
+      'acme-config.yml',
+      'Acme App configuration'
     )
-    print_good("Config saved to: #{path}")
+    print_good("Configuration saved to #{loot_path}")
   end
 end
 ```
 
-### Post module mixins reference
+Do not assume a database record exists. Guard `session.db_record` access (`session.db_record&.id`) and test with the database disconnected.
 
-| Mixin                          | Purpose                                                             |
-| ------------------------------ | ------------------------------------------------------------------- |
-| `Msf::Post::File`              | `read_file`, `write_file`, `file_exist?`, `directory?`, `readable?` |
-| `Msf::Post::Linux::Priv`       | `is_root?`, `id`, `whoami`                                          |
-| `Msf::Post::Linux::Kernel`     | `uname`, `kernel_release`, `kernel_modules`                         |
-| `Msf::Post::Windows::Registry` | `registry_getvaldata`, `registry_enumkeys`, etc.                    |
-| `Msf::Post::Windows::Priv`     | `is_admin?`, `is_system?`, `getsystem`                              |
-| `Msf::Post::Common`            | `cmd_exec(command)`, `get_env(name)`                                |
-| `Msf::Post::Unix`              | `get_users`, `get_groups`, `enum_user_directories`                  |
+## Generated fetch commands
 
----
+When framework/library code generates download-and-execute shell:
 
-## CheckCode Constants
+- do not trust a downloader's exit status alone; verify that the expected artifact exists and is usable;
+- gate fallback so a false-success downloader does not suppress the next method;
+- test the exact generated command under the shells claimed (for example bash, dash, and BusyBox ash);
+- use fake downloaders to cover false success, missing/empty file, invalid executable, network failure, and fallback;
+- avoid subshell/wrapper behavior that hides the status needed by the fallback logic.
 
-Used in `def check` for exploit and scanner modules:
+This is usually library work and therefore requires focused specs, not only a manual module run.
 
-| Constant                 | Code            | When to return                                          |
-| ------------------------ | --------------- | ------------------------------------------------------- |
-| `CheckCode::Unknown`     | `'unknown'`     | Cannot determine vulnerability status (timeout, error)  |
-| `CheckCode::Safe`        | `'safe'`        | Target is NOT vulnerable (patched, not running service) |
-| `CheckCode::Detected`    | `'detected'`    | Service is running but vuln status unknown              |
-| `CheckCode::Appears`     | `'appears'`     | Likely vulnerable (version/banner-based)                |
-| `CheckCode::Vulnerable`  | `'vulnerable'`  | Confirmed vulnerable (active verification)              |
-| `CheckCode::Unsupported` | `'unsupported'` | Module does not support check                           |
+## Non-HTTP QA
 
-CheckCode accepts an optional reason string:
-
-```ruby
-CheckCode::Appears("Version #{version} is in the vulnerable range")
-CheckCode::Safe('Target is running patched version 2.1.0')
-```
-
----
-
-## Multipart File Upload (`vars_form_data`)
-
-For HTTP modules that upload files via multipart/form-data:
-
-```ruby
-res = send_request_cgi(
-  'method' => 'POST',
-  'uri' => normalize_uri(target_uri.path, 'upload'),
-  'vars_form_data' => [
-    {
-      'name' => 'file',
-      'filename' => 'shell.php',
-      'content_type' => 'application/octet-stream',
-      'data' => payload_content,
-      'encoding' => 'binary'
-    },
-    {
-      'name' => 'description',
-      'data' => 'Uploaded file'
-    }
-  ]
-)
-```
-
-### `vars_form_data` field keys
-
-| Key              | Required | Description                               |
-| ---------------- | -------- | ----------------------------------------- |
-| `'name'`         | Yes      | Form field name                           |
-| `'data'`         | Yes      | Field value or file content               |
-| `'filename'`     | No       | Filename (presence makes it a file field) |
-| `'content_type'` | No       | MIME type for file fields                 |
-| `'encoding'`     | No       | `'binary'` for binary content             |
-
----
-
-## Verbose Output
-
-Use `vprint_*` methods for output only shown when `VERBOSE` is true:
-
-```ruby
-vprint_status('Attempting connection...')    # Informational
-vprint_good('Token obtained')               # Success
-vprint_warning('Retrying request...')       # Warning
-vprint_error('Unexpected response code')    # Error (non-fatal)
-```
-
-These are identical to `print_*` but suppressed unless `datastore['VERBOSE']` is true. Use them for detailed debugging info that would be noisy in normal operation.
-
----
-
-## Common Protocol Mixins Quick Reference
-
-| Protocol   | Mixin                               | Default Port | Key Methods                                          |
-| ---------- | ----------------------------------- | ------------ | ---------------------------------------------------- |
-| HTTP       | `Msf::Exploit::Remote::HttpClient`  | 80/443       | `send_request_cgi`, `normalize_uri`                  |
-| TCP (raw)  | `Msf::Exploit::Remote::Tcp`         | -            | `connect`, `disconnect`, `sock.put`, `sock.get_once` |
-| UDP        | `Msf::Exploit::Remote::Udp`         | -            | `connect_udp`, `disconnect_udp`, `udp_sock`          |
-| FTP        | `Msf::Exploit::Remote::Ftp`         | 21           | `connect_login`, `send_cmd`, `data_connect`          |
-| SMB        | `Msf::Exploit::Remote::SMB::Client` | 445          | `connect`, `smb_login`, `smb_create`                 |
-| SSH        | `Msf::Exploit::Remote::SSH`         | 22           | Framework SSH wrapper                                |
-| SMTP       | `Msf::Exploit::Remote::Smtp`        | 25           | `connect`, `raw_send_recv`                           |
-| MySQL      | `Msf::Exploit::Remote::MYSQL`       | 3306         | `mysql_login`, `mysql_query`                         |
-| PostgreSQL | `Msf::Exploit::Remote::Postgres`    | 5432         | `postgres_login`, `postgres_query`                   |
-| MSSQL      | `Msf::Exploit::Remote::MSSQL`       | 1433         | `mssql_login`, `mssql_query`                         |
-| SNMP       | `Msf::Exploit::Remote::SNMPClient`  | 161          | SNMP get/set/walk                                    |
-| LDAP       | `Msf::Exploit::Remote::LDAP`        | 389/636      | LDAP bind/search                                     |
-| Telnet     | `Msf::Exploit::Remote::Telnet`      | 23           | `connect`, `negotiate`                               |
-| WinRM      | `Msf::Exploit::Remote::WinRM`       | 5985/5986    | `winrm_run_cmd`                                      |
+- Connection refusal, timeout, reset, nil/empty read, malformed response, and explicit rejection are distinct paths.
+- Every `check` path has a reason and missing observability maps to `Unknown`.
+- Every target file is checked before opening; every mutation and restoration is verified.
+- Protocol-layer reporting is not duplicated by the module.
+- Session/database assumptions are tested with no DB record.
+- Target platform and architecture use constants and are exercised on every claimed environment.
+- Cleanup restores original state and an immediate rerun succeeds.

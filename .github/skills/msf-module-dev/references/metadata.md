@@ -1,190 +1,210 @@
-# Metadata Reference
+# Metadata, options, targets, and payloads
 
-## Notes Hash (REQUIRED)
+Use the current module schema, RuboCop cops, msftidy checks, and nearby current modules together. Metadata describes real behavior; it is not a box-ticking exercise.
 
-Every module must include a `Notes` hash with all three keys. Enforced by `Lint/ModuleEnforceNotes` rubocop cop.
-
-```ruby
-'Notes' => {
-  'Stability' => [CRASH_SAFE],
-  'Reliability' => [],
-  'SideEffects' => [IOC_IN_LOGS]
-}
-```
-
-### Stability Constants
-
-| Constant                 | Meaning                                                |
-| ------------------------ | ------------------------------------------------------ |
-| `CRASH_SAFE`             | Module will not crash the service                      |
-| `CRASH_SERVICE_RESTARTS` | May crash the service, but it auto-restarts            |
-| `CRASH_SERVICE_DOWN`     | May crash the service permanently                      |
-| `CRASH_OS_RESTARTS`      | May crash the OS, but it auto-restarts                 |
-| `CRASH_OS_DOWN`          | May crash or brick the OS                              |
-| `SERVICE_RESOURCE_LOSS`  | May consume/destroy service resources (data, accounts) |
-| `OS_RESOURCE_LOSS`       | May consume/destroy OS resources (disk, memory)        |
-
-### Reliability Constants
-
-| Constant             | Meaning                                                    |
-| -------------------- | ---------------------------------------------------------- |
-| `REPEATABLE_SESSION` | Consistently produces a session                            |
-| `UNRELIABLE_SESSION` | May or may not produce a session                           |
-| `FIRST_ATTEMPT_FAIL` | First attempt typically fails, subsequent attempts succeed |
-| `EVENT_DEPENDENT`    | Requires a specific event (user action, cron job, etc.)    |
-
-**Important**: `REPEATABLE_SESSION` is **only** for modules that actually create sessions (exploits with payloads). Auxiliary modules that gather data or admin modules use `'Reliability' => []`.
-
-### SideEffects Constants
-
-| Constant            | Meaning                                                    |
-| ------------------- | ---------------------------------------------------------- |
-| `IOC_IN_LOGS`       | Leaves indicators of compromise in application/system logs |
-| `ARTIFACTS_ON_DISK` | Creates files on the target system                         |
-| `CONFIG_CHANGES`    | Modifies target configuration                              |
-| `ACCOUNT_LOCKOUTS`  | May trigger account lockout policies                       |
-| `ACCOUNT_LOGOUT`    | May log users out                                          |
-| `SCREEN_EFFECTS`    | Produces visible changes on screen                         |
-
-Use `UNKNOWN_STABILITY`, `UNKNOWN_RELIABILITY`, or `UNKNOWN_SIDE_EFFECTS` (arrays) if genuinely unsure — but these should be replaced before PR submission.
-
-## References
+## Core metadata
 
 ```ruby
-'References' => [
-  ['CVE', '2024-12345'],        # CVE ID (no "CVE-" prefix)
-  ['EDB', '12345'],             # Exploit-DB ID
-  ['URL', 'https://...'],       # Any URL
-  ['BID', '12345'],             # Bugtraq ID
-  ['MSB', 'MS17-010'],          # Microsoft Security Bulletin
-  ['US-CERT-VU', '123456'],     # US-CERT Vulnerability Note
-  ['ZDI', '20-1234'],           # Zero Day Initiative
-  ['WPVDB', '12345'],           # WPScan Vulnerability Database
-  ['PACKETSTORM', '123456'],    # Packet Storm
-  ['GHSA', 'xxxx-yyyy-zzzz'],  # GitHub Security Advisory
-  ['OSV', 'GHSA-xxxx-yyyy'],   # Open Source Vulnerabilities
-]
+super(
+  update_info(
+    info,
+    'Name' => 'Acme App Unauthenticated Command Injection',
+    'Description' => %q{
+      This module exploits an unauthenticated command injection in Acme App.
+      Versions 4.0.0 through 4.2.1 are affected. Version 4.2.2 fixes the issue.
+    },
+    'Author' => [
+      'Researcher', # Vulnerability discovery
+      'Contributor' # Metasploit module
+    ],
+    'License' => MSF_LICENSE,
+    'References' => [
+      ['CVE', '2026-12345'],
+      ['URL', 'https://vendor.example/advisory']
+    ],
+    'DisclosureDate' => '2026-01-15',
+    'Notes' => {
+      'Stability' => [CRASH_SAFE],
+      'Reliability' => [REPEATABLE_SESSION],
+      'SideEffects' => [IOC_IN_LOGS, ARTIFACTS_ON_DISK]
+    }
+  )
+)
 ```
 
-**msftidy validates**: CVE format must be `YYYY-NNNN+` (4-digit year, 4+ digit ID). EDB and BID must be numeric.
+- `Name`: vendor/product plus vulnerability/effect, concise and searchable.
+- `Description`: `%q{}` for a long multiline description, ASCII only. Explain prerequisites, vulnerable range, and fixed version when known.
+- `Author`: role comments belong in Ruby comments, not in the author string.
+- `References`: each reference is its own two-element array. CVE values omit the `CVE-` prefix.
+- `DisclosureDate`: ISO `YYYY-MM-DD`; required for exploits.
+- `License`: new Metasploit modules normally use `MSF_LICENSE`.
+- `Rank`: exploit modules only. Select it from demonstrated reliability and side effects; do not add Rank to auxiliary/post modules.
 
-## Rankings (Exploit modules only)
+## Notes reflect behavior
 
-**Rank is ONLY for exploit modules**. Never set `Rank` on auxiliary or post modules — reviewers will flag it immediately.
+Exploit, auxiliary, and post modules require Notes with `SideEffects`; current lint may require the full Stability/Reliability/SideEffects structure. Choose values based on every code path.
+
+### Stability
+
+| Constant | Meaning |
+| --- | --- |
+| `CRASH_SAFE` | Expected not to crash the target |
+| `CRASH_SERVICE_RESTARTS` | Service may crash and restart |
+| `CRASH_SERVICE_DOWN` | Service may remain unavailable |
+| `CRASH_OS_RESTARTS` | OS may crash and restart |
+| `CRASH_OS_DOWN` | OS may remain unavailable |
+| `SERVICE_RESOURCE_LOSS` | Service data/resources may be consumed or lost |
+| `OS_RESOURCE_LOSS` | Host resources may be consumed or lost |
+
+### Reliability
+
+| Constant | Meaning |
+| --- | --- |
+| `REPEATABLE_SESSION` | Demonstrably creates repeatable sessions |
+| `UNRELIABLE_SESSION` | Session creation is unreliable |
+| `FIRST_ATTEMPT_FAIL` | The first attempt commonly fails |
+| `EVENT_DEPENDENT` | Session depends on an external event |
+
+Do not use `REPEATABLE_SESSION` on a scanner/gather/admin module that never creates a session; use an empty Reliability array where appropriate.
+
+### Side effects
+
+| Constant | Typical evidence |
+| --- | --- |
+| `IOC_IN_LOGS` | Authentication attempts, exploit requests, process execution, or other logged activity |
+| `ARTIFACTS_ON_DISK` | Any temporary or persistent target file |
+| `CONFIG_CHANGES` | Accounts, settings, services, registry/configuration, or persistent state changes |
+| `ACCOUNT_LOCKOUTS` | Brute-force/password-spray attempts can lock accounts |
+| `ACCOUNT_LOGOUT` | Existing sessions may be invalidated |
+| `SCREEN_EFFECTS` | Visible UI/display changes |
+
+Examples:
+
+- An `AuthBrute` scanner normally has `IOC_IN_LOGS` and `ACCOUNT_LOCKOUTS`.
+- A write-access probe that creates and removes a file still has `ARTIFACTS_ON_DISK`.
+- Cleanup does not erase the fact that an artifact/config change occurred.
+
+## Options
+
+Normal options use `SCREAMING_SNAKE_CASE`; advanced options use `CamelCase`:
 
 ```ruby
-class MetasploitModule < Msf::Exploit::Remote
-  Rank = ExcellentRanking
+register_options(
+  [
+    OptString.new('USERNAME', [true, 'Username for Acme App', nil]),
+    OptString.new('PASSWORD', [true, 'Password for Acme App', nil]),
+    OptInt.new('COUNT', [true, 'Number of records to retrieve', 100]),
+    OptEnum.new('MODE', [true, 'Operation mode', 'read', %w[read write]])
+  ]
+)
+
+register_advanced_options(
+  [
+    OptInt.new('VerifyTimeout', [true, 'Seconds to wait for asynchronous completion', 60])
+  ]
+)
 ```
 
-| Ranking            | Value | Use when                                                            |
-| ------------------ | ----- | ------------------------------------------------------------------- |
-| `ExcellentRanking` | 600   | No memory corruption; works every time with no side effects         |
-| `GreatRanking`     | 500   | Has default target config; works in common cases automatically      |
-| `GoodRanking`      | 400   | Has default target but may not auto-detect; reliable in general     |
-| `NormalRanking`    | 300   | Generally reliable but requires specific config or version matching |
-| `AverageRanking`   | 200   | Sometimes works; may require multiple attempts                      |
-| `LowRanking`       | 100   | Rarely works; very specific conditions                              |
-| `ManualRanking`    | 0     | Essentially a DoS or requires significant manual intervention       |
-
-## Option Types
-
-```ruby
-# Standard options
-OptString.new('NAME', [required?, 'Description', 'default'])
-OptInt.new('COUNT', [true, 'Number of items', 10])
-OptBool.new('SSL', [false, 'Use TLS', false])
-OptEnum.new('MODE', [true, 'Operation mode', 'check', ['check', 'exploit', 'dump']])
-
-# Multi-line form (use when line exceeds ~120 chars):
-# First element MUST start on a new line after [ (Layout/FirstArrayElementLineBreak)
-OptEnum.new('PAYLOAD_TYPE', [
-  true, 'Payload format to use', 'alert',
-  ['alert', 'steal_data', 'custom']
-])
-OptPath.new('WORDLIST', [false, 'Path to wordlist file'])
-OptAddress.new('SRVHOST', [true, 'Callback listener address', '0.0.0.0'])
-OptPort.new('SRVPORT', [true, 'Callback listener port', 8080])
-OptAddressRange.new('RHOSTS', [true, 'Target address range'])
-OptRegexp.new('PATTERN', [false, 'Regex filter pattern'])
-
-# Convenience shortcuts
-Opt::RHOST         # Remote host
-Opt::RPORT(443)    # Remote port with default
-Opt::LHOST         # Local host (for payloads/callbacks)
-Opt::LPORT(4444)   # Local port
-Opt::Proxies       # Proxy chain support
-```
+- Do not re-register options a mixin provides.
+- Use current mixin accessors such as `srvhost` instead of direct `datastore['SRVHOST']` access when the repository lint requires them.
+- Required authentication secrets normally default to `nil`, not `''`. A blank default is valid only when a blank secret is a documented product default.
+- This rule is not about credentials created by an exploit. Generate created usernames/passwords with `Faker` and expose override options only where useful.
+- Avoid custom sleep/timeout options when `WfsDelay`, `HttpClientTimeout`, or another framework option already owns the behavior.
+- Option descriptions explain units and scope. Error messages for a configurable timeout name the option the user can change.
+- Use option `conditions` when a value is relevant only under another mode/target.
 
 ## DefaultOptions
 
+Set only defaults that describe the service or are required for correct execution:
+
 ```ruby
-'DefaultOptions' => {
-  'RPORT' => 443,
-  'SSL' => true,
-  'VHOST' => '',
-  'HttpClientTimeout' => 15,
-  'WfsDelay' => 10       # Wait-for-session delay (exploit modules)
+{
+  'DefaultOptions' => {
+    'RPORT' => 443,
+    'SSL' => true
+  }
 }
 ```
 
-**Do not set `PAYLOAD` in `DefaultOptions`** unless multiple compatible payloads exist and you want to override the MSF default selection. If the `Payload` compat block restricts to one payload type, MSF will select it automatically and a hardcoded default is unnecessary noise.
+Avoid arbitrary `HttpClientTimeout`, `WfsDelay`, `VHOST`, and `PAYLOAD` defaults. Use them only when target behavior establishes a need and document/test the reason.
 
-## DefangedMode (destructive modules)
+Do not set a default payload merely because it was the payload used during development. Let the framework choose where possible. A target-specific default can be justified when framework selection cannot otherwise choose correctly, but it must be tested while switching targets without explicitly resetting `PAYLOAD`.
 
-Use `DefangedMode` instead of a custom boolean guard whenever a module makes **irreversible changes** to the target (password changes, config modifications, data deletion). This is the established MSF convention for destructive modules.
-
-```ruby
-# In register_advanced_options:
-OptBool.new('DefangedMode', [true, 'Run in defanged mode', true]),
-
-# In exploit:
-if datastore['DefangedMode']
-  fail_with(Failure::BadConfig, <<~MSG)
-    This module makes irreversible changes to the target.
-    Set DefangedMode to false if you have authorization to proceed.
-  MSG
-end
-```
-
-- Default is `true` (blocked). The operator must explicitly set `DefangedMode false`.
-- Do **not** pair this with a separate custom acknowledge option — `DefangedMode` covers both the gate and the user-facing explanation.
-- Reference: `modules/exploits/windows/smb/smb_doublepulsar_rce.rb`
-
-## Actions (Auxiliary modules with multiple modes)
+## Targets, architecture, and platform
 
 ```ruby
-'Actions' => [
-  ['Check', { 'Description' => 'Verify the target is vulnerable' }],
-  ['Dump', { 'Description' => 'Exfiltrate data from the target' }]
-],
-'DefaultAction' => 'Check'
+{
+  'Targets' => [
+    [
+      'Unix/Linux Command',
+      {
+        'Platform' => %w[linux unix],
+        'Arch' => ARCH_CMD,
+        'Type' => :unix_cmd
+      }
+    ],
+    [
+      'Linux Dropper',
+      {
+        'Platform' => 'linux',
+        'Arch' => [ARCH_X64, ARCH_AARCH64],
+        'Type' => :linux_dropper
+      }
+    ]
+  ],
+  'DefaultTarget' => 0
+}
 ```
 
-Access in `run` via `action.name`.
+- Name command targets “Unix/Linux Command” or “Windows Command,” not “shell,” when they execute `ARCH_CMD` payloads.
+- Do not repeat top-level `Platform`/`Arch` when every target already defines them; the current linter flags redundant metadata.
+- Use target metadata such as `target['Type']` for dispatch. Do not store sentinel values in unrelated instance variables.
+- Use architecture constants (`ARCH_X64`, `ARCH_AARCH64`, and so on), not regexes over `sysinfo` strings.
+- Include only platforms/architectures the primitive and delivery path support.
+- Use an Automatic target only when the module truly detects and selects another behavior.
+- Prefer a command/fetch-capable target to a CmdStager dropper when the only staging mechanism is curl/wget. Retain a binary/dropper target only for a demonstrated capability or restriction.
+- Define bad characters in payload metadata instead of manually base64-encoding payloads to work around them.
+- Do not call `handler` manually unless the current exploit flow specifically requires it; normal framework execution owns the handler.
 
-## Platform and Arch (Exploit modules)
+## Actions
+
+Use actions only for genuinely distinct auxiliary/module operations:
 
 ```ruby
-'Platform' => %w[linux unix win],
-'Arch' => [ARCH_CMD],           # For command injection
-# or
-'Arch' => [ARCH_X64, ARCH_X86], # For binary payloads
-
-'Targets' => [
-  ['Automatic', {}],
-  ['Linux x64', { 'Platform' => 'linux', 'Arch' => ARCH_X64 }]
-],
-'DefaultTarget' => 0,
-'Privileged' => false
+{
+  'Actions' => [
+    ['ENUMERATE', { 'Description' => 'Enumerate Acme App users' }],
+    ['RESET', { 'Description' => 'Reset an Acme App account password' }]
+  ],
+  'DefaultAction' => 'ENUMERATE'
+}
 ```
 
-**Target naming**: Use `'Automatic'` as the target name for single-target modules or the default auto-detection target in multi-target modules. Avoid descriptive names like `'Unix Command'` when there is only one option — reviewers will flag it.
+Dispatch with `action.name`. If an exploit has only one action, omit the action metadata.
 
-## DisclosureDate
+## DefangedMode
 
-Format: `'YYYY-MM-DD'` (ISO 8601). Enforced by `Lint/ModuleDisclosureDateFormat`.
+For materially destructive or irreversible behavior, follow current framework precedent and register the standard guard as an advanced option:
 
-- **Required** for exploit modules (enforced by `Lint/ModuleDisclosureDatePresent`)
-- **Recommended** for auxiliary modules
-- Set to the date the vulnerability was publicly disclosed or patched
+```ruby
+register_advanced_options(
+  [
+    OptBool.new('DefangedMode', [true, 'Run in defanged mode', true])
+  ]
+)
+
+fail_with(
+  Failure::BadConfig,
+  'This action irreversibly changes target data; set DefangedMode false to continue'
+) if datastore['DefangedMode']
+```
+
+Do not add a second acknowledgement option. Do not require DefangedMode merely because a normal exploit creates cleanup-managed, reversible artifacts.
+
+## Metadata QA
+
+- Compare metadata with the complete exploit path and cleanup ledger.
+- Verify SideEffects for brute force, remote writes, account creation, configuration changes, and cleanup-managed artifacts.
+- Test every target/platform/architecture and target switching without a manually pinned payload.
+- Ensure module and documentation option names/defaults match exactly.
+- Re-run msftidy/RuboCop after changing metadata; lint rules evolve.
