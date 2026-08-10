@@ -42,7 +42,7 @@ super(
 
 ## Notes reflect behavior
 
-Exploit, auxiliary, and post modules require Notes with `SideEffects`; current lint may require the full Stability/Reliability/SideEffects structure. Choose values based on every code path.
+Exploit, auxiliary, and post modules require `Notes` containing all three keys: `Stability`, `Reliability`, and `SideEffects`. Use an empty array when no trait applies and choose every value from actual behavior across all code paths. Treat `lib/msf/core/constants.rb` in the current checkout as authoritative.
 
 ### Stability
 
@@ -77,6 +77,8 @@ Do not use `REPEATABLE_SESSION` on a scanner/gather/admin module that never crea
 | `ACCOUNT_LOCKOUTS` | Brute-force/password-spray attempts can lock accounts |
 | `ACCOUNT_LOGOUT` | Existing sessions may be invalidated |
 | `SCREEN_EFFECTS` | Visible UI/display changes |
+| `AUDIO_EFFECTS` | Audible output, speaker noise, or hardware beeps |
+| `PHYSICAL_EFFECTS` | Device movement, flashing LEDs, or other physical effects |
 
 Examples:
 

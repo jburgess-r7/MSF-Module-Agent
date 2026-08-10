@@ -52,6 +52,8 @@ Rules:
 
 ## Associate a confirmed check result
 
+`Vulnerable` requires direct, vulnerability-specific evidence obtained by safely exercising the flaw. Product identification alone is `Detected`; a version-range match alone is `Appears`.
+
 For an interactive `check` command, attach the exact service to the CheckCode vulnerability metadata:
 
 ```ruby

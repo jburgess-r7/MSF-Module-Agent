@@ -2,6 +2,13 @@
 
 These are shapes, not boilerplate to copy blindly. Inspect the current mixins and nearby recent modules before choosing inheritance, metadata, targets, and reporting.
 
+## Check and AutoCheck contract
+
+- AutoCheck proceeds on `Vulnerable` and `Appears`. It proceeds on `Detected` with a warning.
+- AutoCheck blocks `Safe`, `Unknown`, and `Unsupported` unless `ForceExploit` is enabled. `AutoCheck false` bypasses `check` completely.
+- Do not add a second mandatory vulnerability check inside `exploit`; it would defeat those overrides.
+- A manual console `check` and a later `run` can use different module instances. State created by AutoCheck may be reused only as an optimization with a safe fallback when absent.
+
 ## HTTP exploit pattern
 
 This example separates product fingerprinting from CheckCode policy. That lets `check` return only CheckCodes while `exploit` remains compatible with `AutoCheck false` and `ForceExploit`.
@@ -15,7 +22,7 @@ This example separates product fingerprinting from CheckCode policy. That lets `
 ##
 
 class MetasploitModule < Msf::Exploit::Remote
-  Rank = ExcellentRanking
+  Rank = NormalRanking
 
   prepend Msf::Exploit::Remote::AutoCheck
   include Msf::Exploit::Remote::HttpClient
@@ -90,8 +97,6 @@ class MetasploitModule < Msf::Exploit::Remote
     end
 
     CheckCode::Appears("Acme App #{version} is within the vulnerable range")
-  rescue StandardError => e
-    CheckCode::Unknown("Check failed: #{e.class}: #{e.message}")
   end
 
   def exploit
@@ -218,12 +223,12 @@ Review this shape before adapting it:
 
 - The fingerprint helper always returns one hash shape; it never sometimes returns CheckCode and sometimes data.
 - `exploit` confirms the product but does not reject a patched/unknown version. AutoCheck and `ForceExploit` own that decision.
-- `Appears` is justified only by the version range. A harmless vulnerability canary could instead earn `Vulnerable`.
+- `Appears` is justified only by the version range. Return `Vulnerable` only when a safe canary actually exercises the vulnerability and produces direct, vulnerability-specific evidence.
 - Artifact registration happens immediately after confirmed creation and before payload execution.
 - The trigger timeout is explicit only because the endpoint blocks by design.
 - The service is created when the product is identified and reused by AutoCheck reporting.
 - Exploit-time confirmation reports the same vulnerability/service even when AutoCheck is disabled.
-- The broad rescue in `check` preserves the CheckCode contract, but production code should narrow it to known parser/protocol exceptions where possible and avoid leaking sensitive values.
+- Do not add a catch-all rescue to `check`. Rescue only documented parser or protocol exceptions, map assessment failures to a reasoned `Unknown`, and avoid leaking sensitive values.
 
 ## Auxiliary gather pattern
 

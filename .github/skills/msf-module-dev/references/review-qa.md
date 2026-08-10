@@ -6,7 +6,7 @@ Use this reference when reviewing a module, responding to pull-request feedback,
 
 For each non-obvious design decision, use the strongest available evidence:
 
-1. Applicable `AGENTS.md` and the user's task.
+1. The user's requested outcome defines scope; applicable `AGENTS.md` governs the files. Surface any direct conflict.
 2. Current mixin/API implementation and its specs.
 3. Official Metasploit developer documentation.
 4. Recent Rapid7 review discussion and recently merged implementations.
