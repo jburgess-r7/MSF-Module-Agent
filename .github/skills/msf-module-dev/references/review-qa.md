@@ -89,7 +89,7 @@ Use `git diff --check` and inspect the complete diff. A reviewer suggestion can 
 
 Start the checkout's `./msfconsole` with an isolated `MSF_CFGROOT_CONFIG`. Record the exact revision, target product version, target architecture, selected target, selected payload, and relevant network topology.
 
-At minimum test:
+For every case applicable to the module and changed behavior, either test it or record that it was not run and why:
 
 | Case | Expected evidence |
 | --- | --- |
@@ -108,6 +108,8 @@ At minimum test:
 
 For session exploits, interact with the session (`getuid`, `sysinfo`, `id`, or an equivalent harmless command) instead of treating “session opened” as the only evidence. Test command and staged/session targets separately when both exist. For timing-sensitive changes or a `REPEATABLE_SESSION` claim, run multiple consecutive cycles; ten clean exploit/cleanup/rerun cycles is a useful review target when practical.
 
+Before manual QA, inventory relevant pre-existing lab instances, processes, listeners, sessions/jobs, and configuration. Where configurable, use test-owned names, unique local ports, and isolated configuration. Remove only test-owned state unless broader cleanup is explicitly authorized; verify cleanup-managed state is gone, measure and report intentionally persistent target artifacts, and confirm anything meant to be preserved remains. Distinguish target artifacts, payload/session state, framework state, local evidence, and lab teardown: destroying a disposable lab is not proof that module cleanup worked.
+
 For every mutation, verify that ownership/cleanup state is armed before the following network request can fail. Exercise that exact failure boundary. A cleanup HTTP status is insufficient when the product returns a success field or supports a read-back check.
 
 ## Regression discipline
@@ -123,14 +125,17 @@ After a rebase or payload/default change:
 5. Compare packets/logs or bisect the relevant framework change before asserting a transport root cause.
 6. Rerun the complete target/payload and cleanup matrix.
 
-Do not automatically extract a shared library after seeing two similar modules. Search for demonstrated reuse, weigh API stability, and prefer focused module code until an abstraction has enough consumers to justify its maintenance cost.
+Do not extract solely for line count or superficial similarity. A cohesive, independently testable module-specific library can be justified with one consumer; normally keep module metadata, options, targets, and top-level `check`/`run`/`exploit` orchestration in the module. Mirror library tests under `spec/lib`, preserve include order, visibility, constants, state, and exception contracts, and prove equivalence before deleting prior coverage. Require demonstrated reuse and stable contracts before promoting it to a broadly shared API.
 
-In the pull-request comment, distinguish:
+Bind every test claim to the source state it exercised. For a dirty worktree, a commit identifier alone is insufficient; retain the relevant diff or content hashes with primary evidence, with secrets redacted or access restricted. Distinguish validators and live tests run against the final source state, pre-change live tests, human-provided Scenarios, and historical or summary-only evidence. After later changes, retest affected behavior or qualify the older result. This traceability belongs in working evidence; do not add revision hashes or local diff output to a pull-request description unless they help reviewers.
 
-- validators run;
-- environments and versions manually tested;
-- targets and payloads exercised;
-- cleanup/repeatability evidence;
+In the pull-request description or review comment, distinguish:
+
+- validators run and their results;
+- environments, versions, targets, and payloads manually exercised;
+- retained live evidence and whether it matches the final source state;
+- cleanup, repeatability, and measured persistent artifacts;
+- historical or summary-only evidence when cited;
 - anything not tested or not proven.
 
 ## Maintaining this QA package

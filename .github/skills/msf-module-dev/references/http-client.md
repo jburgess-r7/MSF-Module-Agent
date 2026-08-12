@@ -229,11 +229,15 @@ res = send_request_cgi(
 
 Use `send_request_cgi!` only when its redirect-following behavior is desired and validated. Redirects can cross paths/hosts or turn an authentication failure into a misleading final response; inspect the effective content and cookies.
 
+Treat target-supplied absolute URLs and redirect destinations as untrusted outbound requests. Validate scheme and origin before dispatch, never trust target-supplied authority or framing headers, and do not implicitly forward application-origin cookies or authentication across origins. Validate service-specific headers separately. After an external hop, do not automatically reattach application credentials on return; model a documented multi-origin flow with explicit per-origin state.
+
 ## HTTP QA
 
 - Nil response before every parser/body access.
 - Malformed and unexpected JSON/XML/HTML shapes.
-- Redirect, authentication failure, alternate base path, VHOST, HTTP and HTTPS.
+- Same-origin, scheme-relative, cross-origin, malformed or unsupported-scheme, and redirect-loop or hop-limit behavior; verify cookies and credentials remain scoped to approved origins.
+- Authentication failure, alternate base path, VHOST, HTTP and HTTPS.
+- Oversized responses and parser expansion; distinguish post-read size checks from transport-level response limits, and do not claim a wire or memory cap when the HTTP client has already buffered the body.
 - Reserved characters in dynamic query/form/path values.
 - Localized/non-English target where UI strings are used.
 - Product-specific evidence after mutations.

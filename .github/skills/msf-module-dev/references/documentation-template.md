@@ -29,6 +29,8 @@ Include enough information to recreate the target years later:
 - authoritative download/advisory links;
 - complete setup and teardown steps.
 
+Distinguish the advisory's affected range, the module's supported range, and the exact versions manually exercised. For multi-stage chains, attribute prerequisites and released or proposed fixes to the stage they affect.
+
 When a reproducible Docker/Compose lab is used, keep the runnable definition in the module document when current project automation/review expects it. Pin vulnerable image/package versions. Do not rely only on an external repository that may disappear or change.
 
 Example shape:
@@ -91,7 +93,7 @@ The number of seconds to wait for the asynchronous job to finish. The default
 is 60 seconds.
 ```
 
-Cross-check every registered option/default against the document. Remove stale options when code changes.
+Cross-check every registered option, default, validation constraint, and conditional behavior against the document. Remove stale options when code changes.
 
 ### Scenarios
 
@@ -103,6 +105,8 @@ Scenarios must be supplied and refreshed by a human from real target output. An 
 - cleanup/reporting output.
 
 Each scenario heading identifies product version, OS/container image, architecture, target, and meaningful payload type. Include `check`, exploitation/gathering, proof of effect, cleanup, and an immediate rerun where repeatability matters.
+
+State whether the captured output used the document's exact setup recipe or a different lab. Do not attribute output to a recipe when materially relevant versions, dependencies, configuration, or topology differ; record those differences.
 
 ```markdown
 ## Scenarios

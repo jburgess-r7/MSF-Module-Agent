@@ -117,7 +117,6 @@ Authentication brute force normally implies both `IOC_IN_LOGS` and `ACCOUNT_LOCK
 - SMB: use the current RubySMB-backed client mixins; do not implement SMB framing manually.
 - SSH: use framework SSH/login-scanner support and its credential result contract.
 - LDAP, DCERPC, SMB, and modern HTTP mixins may already create layered services/resources. Inspect their `report_*_service` helpers before adding another.
-- For complex binary parsing with BinData, RASN1, or Rex::Struct2, link the governing RFC/specification in a code comment and add specs.
 
 ## Session ownership and module type
 
