@@ -1,0 +1,4 @@
+interface:
+  display_name: "Metasploit Module Developer"
+  short_description: "Develop and review Metasploit modules"
+  default_prompt: "Use $msf-module-dev to review this Metasploit module and its documentation against the current checkout."

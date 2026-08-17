@@ -155,8 +155,10 @@ Before a major module review, refresh against:
 2. current module RuboCop cops and their specs;
 3. current mixin/reporting/payload implementations and specs;
 4. recent Rapid7 PR discussion in the same module/protocol area;
-5. the official module documentation template.
-6. GitHub's current [custom-agent configuration](https://docs.github.com/en/copilot/reference/custom-agents-configuration) and [agent-skills format](https://docs.github.com/en/copilot/how-tos/copilot-on-github/customize-copilot/customize-cloud-agent/add-skills).
+5. the official module documentation template;
+6. Codex's current [Agent Skills format](https://learn.chatgpt.com/docs/build-skills);
+7. Claude Code's current [skills](https://code.claude.com/docs/en/skills) and [subagents](https://code.claude.com/docs/en/sub-agents) formats; and
+8. GitHub's current [custom-agent configuration](https://docs.github.com/en/copilot/reference/custom-agents-configuration) and [agent-skills format](https://docs.github.com/en/copilot/how-tos/copilot-on-github/customize-copilot/customize-cloud-agent/add-skills).
 
 Promote a review comment to a general rule only when it follows current framework behavior or recurs across contexts. Label context-specific guidance instead of turning it into an absolute rule. Examples include target-specific `WfsDelay`, `ExitFunc`, payload offsets, and whether a particular exploit needs DefangedMode.
 
@@ -164,9 +166,10 @@ Recent custom cops are themselves useful convention-change signals. At the time 
 
 After editing this package:
 
-- validate `SKILL.md` with the skill validator;
+- validate the canonical and client-adapter `SKILL.md` files with the relevant skill validators;
 - when GitHub CLI 2.90.0+ is available, optionally run `gh skill publish --dry-run` for the current Agent Skills schema;
 - check all relative links and Markdown fences;
+- smoke-test skill discovery and invocation in each supported client whose CLI is available;
 - syntax-check Ruby code fences and run repository RuboCop against full module examples;
 - forward-test with a clean agent on both an HTTP and a non-HTTP review task;
 - revise rules that generate false positives or miss evidence-backed issues.

@@ -1,12 +1,12 @@
 # MSF Module Development Agent
 
-A GitHub Copilot custom agent and reusable skill for creating, reviewing, fixing, and manually validating [Metasploit Framework](https://github.com/rapid7/metasploit-framework) modules against the policy and APIs in the current checkout.
+A cross-client agent skill for creating, reviewing, fixing, and manually validating [Metasploit Framework](https://github.com/rapid7/metasploit-framework) modules against the policy and APIs in the current checkout. It supports Codex, Claude Code, and GitHub Copilot from one canonical skill.
 
 The package is designed to reduce avoidable review feedback, not guarantee maintainer acceptance. Metasploit conventions evolve, so applicable `AGENTS.md` files, current framework source and tests, official documentation, and recent Rapid7 review evidence take priority over a single older module.
 
 ## What It Does
 
-When selected, the **Metasploit Module Developer** agent:
+When invoked, the **Metasploit Module Developer** agent or skill:
 
 1. Reads applicable `AGENTS.md` instructions and scopes the requested work.
 2. Classifies the module and checks for existing modules or open pull requests covering the same vulnerability.
@@ -24,56 +24,72 @@ The agent does not fabricate documentation Scenarios, test output, sessions, or 
 
 ```text
 .
-├── README.md
-└── .github/
-    ├── agents/
-    │   └── msf-module.agent.md
-    └── skills/
-        └── msf-module-dev/
-            ├── SKILL.md
-            └── references/
-                ├── review-qa.md
-                ├── module-template.md
-                ├── metadata.md
-                ├── http-client.md
-                ├── reporting.md
-                ├── non-http-modules.md
-                └── documentation-template.md
+├── .agents/
+│   └── skills/
+│       └── msf-module-dev/
+│           ├── SKILL.md
+│           ├── agents/
+│           │   └── openai.yaml
+│           └── references/
+│               ├── review-qa.md
+│               ├── module-template.md
+│               ├── metadata.md
+│               ├── http-client.md
+│               ├── reporting.md
+│               ├── non-http-modules.md
+│               └── documentation-template.md
+├── .claude/
+│   ├── agents/
+│   │   └── msf-module-developer.md
+│   └── skills/
+│       └── msf-module-dev/
+│           └── SKILL.md
+├── .github/
+│   └── agents/
+│       └── msf-module.agent.md
+└── README.md
 ```
 
-- [`msf-module.agent.md`](.github/agents/msf-module.agent.md) defines the agent's authority order, workflow, tools, safety boundary, and review priorities.
-- [`SKILL.md`](.github/skills/msf-module-dev/SKILL.md) contains the core workflow and routes the agent to relevant references.
-- [`review-qa.md`](.github/skills/msf-module-dev/references/review-qa.md) covers evidence freshness, recurring review feedback, static review, manual testing, and regression discipline.
-- [`module-template.md`](.github/skills/msf-module-dev/references/module-template.md) provides annotated remote exploit and auxiliary gather patterns.
-- [`metadata.md`](.github/skills/msf-module-dev/references/metadata.md) covers metadata, Notes, options, targets, actions, and `DefaultOptions`.
-- [`http-client.md`](.github/skills/msf-module-dev/references/http-client.md) covers requests, URI handling, timeouts, parsing, cookies, redirects, and HTTP QA.
-- [`reporting.md`](.github/skills/msf-module-dev/references/reporting.md) covers application services, vulnerabilities, credentials, logins, loot, and tables.
-- [`non-http-modules.md`](.github/skills/msf-module-dev/references/non-http-modules.md) covers scanners, raw TCP, LoginScanner, protocol mixins, local/post modules, file operations, and generated fetch commands.
-- [`documentation-template.md`](.github/skills/msf-module-dev/references/documentation-template.md) covers module documentation and human-recorded Scenarios.
+- [The canonical `SKILL.md`](.agents/skills/msf-module-dev/SKILL.md) contains the shared workflow and routes every client to relevant references.
+- [`msf-module.agent.md`](.github/agents/msf-module.agent.md) is the thin GitHub Copilot custom-agent launcher.
+- [`msf-module-developer.md`](.claude/agents/msf-module-developer.md) and [the Claude skill adapter](.claude/skills/msf-module-dev/SKILL.md) expose the canonical skill to Claude Code.
+- [`openai.yaml`](.agents/skills/msf-module-dev/agents/openai.yaml) provides Codex-facing display metadata.
+- The canonical [`references/`](.agents/skills/msf-module-dev/references/) directory contains the detailed module patterns and QA guidance.
 
 ## Installation
 
-Copy only the agent and skill directories into the Metasploit checkout you want the agent to inspect:
+Copy the directories for the clients you intend to use into the Metasploit checkout, or copy all three to support every client:
 
 ```text
 metasploit-framework/
+├── .agents/
+│   └── skills/
+│       └── msf-module-dev/
+│           └── ...
+├── .claude/
+│   ├── agents/
+│   │   └── msf-module-developer.md
+│   └── skills/
+│       └── msf-module-dev/
+│           └── SKILL.md
 └── .github/
-    ├── agents/
-    │   └── msf-module.agent.md
-    └── skills/
-        └── msf-module-dev/
-            ├── SKILL.md
-            └── references/
-                └── ...
+    └── agents/
+        └── msf-module.agent.md
 ```
 
-Merge them with the checkout's existing `.github/` directory. Do not replace or copy the entire source repository's `.github/` tree, which also contains unrelated workflows, issue templates, and repository configuration.
+Merge these directories with any existing configuration; do not replace an existing `.github/`, `.claude/`, or `.agents/` tree.
 
-Select **Metasploit Module Developer** from the agent picker in a GitHub Copilot environment that supports repository custom agents and skills.
+- **Codex:** Copy `.agents/`. Invoke `$msf-module-dev` explicitly or describe an MSF module-development task and allow the skill to trigger from its description.
+- **GitHub Copilot:** Copy `.agents/` and `.github/agents/`, then select **Metasploit Module Developer**. Copilot also discovers the canonical skill directly from `.agents/skills/`.
+- **Claude Code:** Copy `.agents/` and `.claude/`. Invoke `/msf-module-dev` or ask Claude to use the `msf-module-developer` subagent. The Claude adapter delegates to the canonical skill.
+
+The `.claude/skills/` adapter depends on `.agents/skills/`; do not install the adapter by itself.
+
+The layouts follow the current [Codex skill](https://learn.chatgpt.com/docs/build-skills), [GitHub Copilot agent-skill](https://docs.github.com/en/copilot/concepts/agents/about-agent-skills), and [Claude Code skill](https://code.claude.com/docs/en/skills) conventions.
 
 ### Requirements
 
-- A GitHub Copilot environment with repository custom-agent and skill support.
+- Codex, Claude Code, or a GitHub Copilot environment with repository skill support.
 - A Metasploit Framework source checkout containing the module under development.
 - The checkout's Ruby dependencies when running RuboCop, specs, or bundled validators.
 - An authorized test environment for manual vulnerability and cleanup testing.
@@ -82,7 +98,7 @@ The agent does not assume Metasploit is installed under `/opt`. It validates the
 
 ## Usage
 
-Select the **Metasploit Module Developer** agent, then describe the task and point it to the relevant local artifacts.
+Invoke the `msf-module-dev` skill or select the **Metasploit Module Developer** agent, then describe the task and point it to the relevant local artifacts.
 
 ### Create a Module From a PoC
 
@@ -163,10 +179,10 @@ The current checkout remains the source of truth. Existing modules and past revi
 
 ## Customization and Maintenance
 
-Edit [`.github/agents/msf-module.agent.md`](.github/agents/msf-module.agent.md) to adjust the description, tools, workflow, or safety constraints.
+Keep domain guidance in [the canonical skill](.agents/skills/msf-module-dev/SKILL.md). The Copilot and Claude agent files should remain thin launchers rather than repeat the workflow.
 
-Add focused material under [`.github/skills/msf-module-dev/references/`](.github/skills/msf-module-dev/references/) and link it from the References table in [`.github/skills/msf-module-dev/SKILL.md`](.github/skills/msf-module-dev/SKILL.md). Keep the core skill concise and route detailed or variant-specific guidance to references.
+Add focused material under [`.agents/skills/msf-module-dev/references/`](.agents/skills/msf-module-dev/references/) and link it from the References table in [the canonical `SKILL.md`](.agents/skills/msf-module-dev/SKILL.md). Keep the core skill concise and route detailed or variant-specific guidance to references.
 
-Before a substantial refresh, compare the package against applicable `AGENTS.md` history, current framework mixins/APIs/custom cops/specs, official developer documentation, recent Rapid7 feedback in the same module area, and the current custom-agent and skill formats supported by the intended Copilot environment.
+When changing the skill name or trigger description, keep the Claude adapter metadata aligned and regenerate `agents/openai.yaml`. Before a substantial refresh, compare the package against applicable `AGENTS.md` history, current framework mixins/APIs/custom cops/specs, official developer documentation, recent Rapid7 feedback in the same module area, and the current Codex, Claude Code, and GitHub Copilot formats.
 
 After editing the package, validate the skill metadata, relative links, Markdown fences, Ruby examples, and full module examples before publishing the update.
