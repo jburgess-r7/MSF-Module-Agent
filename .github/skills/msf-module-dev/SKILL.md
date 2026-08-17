@@ -19,6 +19,7 @@ Before inspecting examples or editing:
    - existing modules, only after verifying that their APIs and patterns remain current.
 3. Follow the higher-authority evidence when this package disagrees with the checkout, flag stale package guidance, and surface a direct conflict between the request and repository instructions.
 4. Separate observations from conclusions. Do not claim success, repeatability, test coverage, or a root cause without evidence.
+5. Treat public analyses, proof-of-concept code, and output from other agents or AI tools as leads rather than proof. Reproduce material claims against the current checkout and the target's real integration path before relying on them.
 
 ## Load only relevant detail
 
@@ -55,6 +56,7 @@ Read every row matching the task; do not preload unrelated references.
 - In `run` and `exploit`, use a specific `fail_with(Failure::..., reason)` for fatal target, response, or configuration failures. Rescue only exceptions the invoked operation can genuinely raise; do not conceal programming errors with a blanket rescue.
 - In library code, raise a domain-appropriate exception class and preserve useful context. Never `rescue Exception`; it catches signals and exits.
 - Before writing bespoke parser or decoder code, inspect current declared or locked dependencies, their public APIs, and available security notes. For untrusted input, understand resource behavior and enforce format-appropriate structural and resource limits before or around delegation; translate only expected documented exceptions, link the governing format for nontrivial binary formats, and test applicable malformed, truncated, trailing, and resource-exhaustion boundaries.
+- When compatibility depends on framework or library configuration, trace how the application actually constructs both producer and consumer, including wrappers, fallbacks, and version-dependent defaults, and reproduce that path end to end. A standalone probe of a class or dependency proves only the configuration it directly instantiated.
 - Validate product-specific evidence after every state-changing operation. Track ownership and restoration state before the next fallible step, and before an operation that can partially mutate despite failing. Delete only artifacts created by the module, preserve captured original state, call `super` from cleanup, and verify an immediate rerun.
 - Report an identified application or protocol service as soon as evidence supports it. Associate vulnerabilities, credential logins, and loot with that exact service/resource, avoid duplicates, support `AutoCheck false`, and tolerate a disconnected database.
 - Let the framework choose compatible payloads when possible. Retest every target and payload-selection path after target, architecture, staging, or default changes; do not infer success from session counts or call the handler without a demonstrated lifecycle reason.

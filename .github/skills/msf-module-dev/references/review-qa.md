@@ -22,6 +22,12 @@ git log --since='12 months ago' -- modules/<area> lib/msf/core/<area>
 
 When review feedback changes a convention, update the rule and the example that demonstrates it. A correct prose rule paired with stale sample code will reproduce the same defect.
 
+## Pull-request feedback ledger
+
+For an existing pull request, enumerate every current top-level and inline review conversation before editing and again before handoff, including threads GitHub marks outdated. Track each thread's URL or path, request, disposition, rationale, resulting code/documentation/spec change, manual evidence, and required reply. Distinguish already resolved threads from unresolved work.
+
+Refresh the ledger after applying suggestions through the GitHub UI or receiving new feedback. Do not claim that all feedback is addressed until every entry is reconciled. If authentication, pagination, or page-loading failures prevent complete enumeration, state that review coverage is incomplete.
+
 ## Fast review searches
 
 Use these as prompts for inspection, not automatic findings:
@@ -100,6 +106,7 @@ For every case applicable to the module and changed behavior, either test it or 
 | `AutoCheck false` | Exploit does not depend on check-created state |
 | `ForceExploit true` | No module-local duplicate guard defeats the override |
 | Every target/action | Correct platform, architecture, payload, and output |
+| Fresh default payload | A new isolated console and module instance with no local or global `PAYLOAD` setting selects the intended compatible payload before payload-specific options are set |
 | Change target without setting payload | Framework selects a compatible payload or gives a clear error |
 | Partial failure after each mutation | Owned artifacts are removed or clearly reported |
 | Immediate rerun with identical names | No stale account/file/plugin/repository collision |
@@ -137,6 +144,8 @@ In the pull-request description or review comment, distinguish:
 - cleanup, repeatability, and measured persistent artifacts;
 - historical or summary-only evidence when cited;
 - anything not tested or not proven.
+
+Treat the live pull-request title, body, and reviewer replies as diff-aware artifacts. After the final edit, accepted suggestion, rebase, or target/payload/default change, reopen them and reconcile option and target names, payloads, commands, file/spec counts, test results, evidence provenance, and limitations with the final source state. If changing the pull request is not authorized, report the exact paste-ready corrections instead.
 
 ## Maintaining this QA package
 
