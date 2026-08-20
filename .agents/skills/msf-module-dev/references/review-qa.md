@@ -75,7 +75,7 @@ These are patterns seen repeatedly in recent Rapid7 reviews; verify them against
 
 Review the whole behavior, not only lines mentioned by a reviewer:
 
-- metadata, affected/fixed versions, references, targets, platform and architecture;
+- metadata, affected/fixed versions, references, targets, and exact platform/architecture compatibility tags;
 - inherited versus explicitly registered options, including advanced-option casing;
 - every return path from `check` and its shared helpers;
 - precondition order, so intended `Safe`, `Unknown`, and `Detected` branches are actually reachable;
@@ -105,7 +105,7 @@ For every case applicable to the module and changed behavior, either test it or 
 | `AutoCheck true` | Framework check leads into exploitation correctly |
 | `AutoCheck false` | Exploit does not depend on check-created state |
 | `ForceExploit true` | No module-local duplicate guard defeats the override |
-| Every target/action | Correct platform, architecture, payload, and output |
+| Every target/action | Declared `Platform`/`Arch` explicitly covers every supported or tested OS/architecture; `show payloads` exposes the expected families; execution and output are correct |
 | Fresh default payload | A new isolated console and module instance with no local or global `PAYLOAD` setting selects the intended compatible payload before payload-specific options are set |
 | Change target without setting payload | Framework selects a compatible payload or gives a clear error |
 | Partial failure after each mutation | Owned artifacts are removed or clearly reported |

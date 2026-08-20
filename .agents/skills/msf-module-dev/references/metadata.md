@@ -162,6 +162,7 @@ Do not set a default payload merely because it was the payload used during devel
 - Do not repeat top-level `Platform`/`Arch` when every target already defines them; the current linter flags redundant metadata.
 - Use target metadata such as `target['Type']` for dispatch. Do not store sentinel values in unrelated instance variables.
 - Use architecture constants (`ARCH_X64`, `ARCH_AARCH64`, and so on), not regexes over `sysinfo` strings.
+- Treat `Platform` entries as exact payload-compatibility tags, not prose OS families. Do not assume similarly named platforms imply one another; verify their relationship in the current `platform.rb` and `platform_list.rb`. In the current framework, `linux` and `unix` are distinct sibling tags, so declare both when the primitive supports both.
 - Include only platforms/architectures the primitive and delivery path support.
 - Use an Automatic target only when the module truly detects and selects another behavior.
 - Prefer a command/fetch-capable target to a CmdStager dropper when the only staging mechanism is curl/wget. Retain a binary/dropper target only for a demonstrated capability or restriction.
@@ -207,6 +208,7 @@ Do not add a second acknowledgement option. Do not require DefangedMode merely b
 
 - Compare metadata with the complete exploit path and cleanup ledger.
 - Verify SideEffects for brute force, remote writes, account creation, configuration changes, and cleanup-managed artifacts.
-- Test every target/platform/architecture and target switching without a manually pinned payload.
+- Reconcile every documented and manually tested OS/architecture with each target's declared `Platform`/`Arch`. Successful execution of one compatible payload on a host does not prove that the target metadata includes that host's platform tag.
+- From a fresh isolated console, inspect `show payloads` for every target, confirm the expected platform-specific payload families and default selection, and test target switching without a manually pinned payload.
 - Ensure module and documentation option names/defaults match exactly.
 - Re-run msftidy/RuboCop after changing metadata; lint rules evolve.
